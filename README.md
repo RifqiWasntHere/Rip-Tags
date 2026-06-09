@@ -1,16 +1,17 @@
-# Tag Ripper
+# Rip-Tags (In-Development)
 
-A small Streamlit app for previewing and cleaning audio metadata.
+So uhh.. i'm having this problem where, everytime i bought a music from Itunes Store, the tags metadata were overwhelming my Fiio x Snowsky Echo DAP. 
+Thus why, i'm trying to build this tool to automate the solution. I initially had no visions for a full audio file kit whatsoever, but let's see what i can do.
 
-## Run
+## To Run :
 
 ```bash
-python -m venv .venv
+python -m venv .venv (
 .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run streamlit_app.py
 ```
 
-## Project Structure
+## Project Structure (Thank you GPT for the help on writing this pain in the ass)
 
 ```text
 .
@@ -30,4 +31,4 @@ python -m venv .venv
 - `.m4a`
 - `.mp4`
 
-Preview mode is enabled by default in the app. Turn it off and enable metadata writes when you are ready to clean files.
+Also, preview mode is enabled by default in the app. Turn it off to enable metadata writes when you are ready to clean files.
