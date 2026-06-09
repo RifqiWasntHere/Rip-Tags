@@ -6,7 +6,3 @@ __all__ = [
     "clean_file",
     "scan",
 ]
-
-
-if __name__ == "__main__":
-    scan("./target", dry_run=False)
