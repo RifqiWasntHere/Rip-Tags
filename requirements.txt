@@ -1,2 +1,3 @@
 mutagen>=1.47
+pillow>=11.3
 streamlit>=1.50
