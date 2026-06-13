@@ -15,6 +15,12 @@ def render_selected_file() -> bool:
 
     info = read_audio_info(Path(selected_file))
 
+    # Back button to batch processing page
+    if st.button("Back", icon=":material/arrow_back:", key="back_to_batch"):
+        st.session_state.pop("selected_file", None)
+        st.rerun()
+
+
     st.subheader(info.path.name)
     _render_cover_status(info.path)
 

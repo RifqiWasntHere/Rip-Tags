@@ -24,6 +24,7 @@ def render_sidebar() -> Path:
                 st.session_state.target_folder = selected_folder
                 st.session_state.pop("selected_file", None)
 
+        st.caption("Supported: " + ", ".join(sorted(SUPPORTED_SUFFIXES)))
 
         st.divider()
 
@@ -32,9 +33,8 @@ def render_sidebar() -> Path:
 
         if not folder_path.exists() or not folder_path.is_dir():
             st.info("Select a valid folder.")
-        else:
+        else:   
             _render_folder_tree(folder_path)
-            st.caption("Supported: " + ", ".join(sorted(SUPPORTED_SUFFIXES)))
 
     return folder_path
 
@@ -80,7 +80,6 @@ def _browse_folder(initial_folder: str) -> str:
 
 
 def _render_folder_tree(folder_path: Path):
-    st.caption(str(folder_path))
     _render_directory(folder_path, depth=0)
 
 

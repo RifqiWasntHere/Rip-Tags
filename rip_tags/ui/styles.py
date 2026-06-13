@@ -119,12 +119,13 @@ def apply_app_shell_styles():
                 margin-top: 0.35rem;
             }
 
-            [data-testid="stPopover"] {
+            /* Style the cover editor popover container and button specifically */
+            div[data-testid="stHorizontalBlock"]:has(img, .cover-empty-label) div[data-testid="stPopover"] {
                 position: relative;
                 z-index: 5;
             }
 
-            [data-testid="stPopover"] button {
+            div[data-testid="stHorizontalBlock"]:has(img, .cover-empty-label) [data-testid="stPopoverButton"] {
                 margin-left: -3rem;
                 margin-top: 0.5rem;
                 padding-left: 0.72rem;
@@ -132,7 +133,8 @@ def apply_app_shell_styles():
                 transition: opacity 120ms ease;
             }
 
-            div[data-testid="stPopover"] button svg {
+            /* Globally hide the default dropdown caret arrow for all popovers with custom icons */
+            [data-testid="stPopoverButton"] svg {
                 display: none !important;
             }
         </style>
