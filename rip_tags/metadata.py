@@ -50,13 +50,44 @@ def read_audio_info(path: Path) -> AudioInfo:
         return AudioInfo(path, "unknown", None, None, None, None, None, {}, error=str(e))
 
 
+MP4_TAG_MAPPING = {
+    "\xa9nam": "title",
+    "\xa9ART": "artist",
+    "\xa9alb": "album",
+    "\xa9day": "date",
+    "trkn": "tracknumber",
+    "\xa9gen": "genre",
+    "aART": "albumartist",
+    "cprt": "copyright",
+    "\xa9wrt": "composer",
+    "\xa9too": "encoder",
+    "covr": "cover",
+    "\xa9lyr": "lyrics",
+    "\xa9cmt": "comment",
+    "\xa9grp": "grouping",
+}
+
+
+def to_human_tag(tag: str) -> str:
+    # Exact match check
+    if tag in MP4_TAG_MAPPING:
+        return MP4_TAG_MAPPING[tag]
+    # Case insensitive check
+    if tag.lower() in MP4_TAG_MAPPING:
+        return MP4_TAG_MAPPING[tag.lower()]
+    # Normalize unmapped tags starting with copyright symbol
+    if tag.startswith("\xa9"):
+        return "©" + tag[1:]
+    return tag
+
+
 def _read_tags(audio) -> dict[str, Any]:
     if audio.tags is None:
         return {}
 
     return {
-        str(key): _format_tag_value(value)
-        for key, value in sorted(audio.tags.items(), key=lambda item: str(item[0]).lower())
+        to_human_tag(str(key)): _format_tag_value(value)
+        for key, value in sorted(audio.tags.items(), key=lambda item: to_human_tag(str(item[0])).lower())
     }
 
 
