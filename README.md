@@ -32,3 +32,16 @@ python -m venv .venv (
 - `.mp4`
 
 Also, preview mode is enabled by default in the app. Turn it off to enable metadata writes when you are ready to clean files.
+
+pyinstaller \
+  --clean \
+  --windowed \
+  --name RipTags \
+  --add-data "streamlit_app.py:." \
+  --add-data "rip_tags:rip_tags" \
+  --collect-all streamlit \
+  --collect-all mutagen \
+    --collect-all PIL \
+  --collect-all webview \
+  --copy-metadata streamlit \
+  launcher.py
