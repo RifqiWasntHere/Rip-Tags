@@ -1,65 +1,46 @@
-import os
-import sys
+import subprocess
+import socket
 import time
-import threading
-
-import requests
-import webview
-import streamlit.web.cli as stcli
-
+# import webview
 
 PORT = 8501
 
-
-def run_streamlit():
-    if getattr(sys, "frozen", False):
-        app_path = os.path.join(sys._MEIPASS, "streamlit_app.py")
-    else:
-        app_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "streamlit_app.py"
-        )
-
-    sys.argv = [
-        "streamlit",
-        "run",
-        app_path,
-        f"--server.port={PORT}",
-        "--global.developmentMode=false",
-        "--server.headless=true",
-    ]
-
-    stcli.main()
+streamlit_proc = subprocess.Popen([
+    "streamlit",
+    "run",
+    "streamlit_app.py",
+    f"--server.port={PORT}",
+    "--server.headless=true",
+])
 
 
-def wait_for_streamlit():
-    url = f"http://127.0.0.1:{PORT}"
+def on_closed():
+    print("Closing Streamlit...")
 
-    while True:
+    if streamlit_proc.poll() is None:
+        streamlit_proc.terminate()
+
         try:
-            requests.get(url, timeout=1)
-            return
-        except Exception:
-            time.sleep(0.5)
+            streamlit_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            streamlit_proc.kill()
 
 
-if __name__ == "__main__":
-    # Start Streamlit in background
-    threading.Thread(
-        target=run_streamlit,
-        daemon=True,
-    ).start()
+# Wait until Streamlit is ready
+for _ in range(50):
+    try:
+        with socket.create_connection(("localhost", PORT), timeout=1):
+            break
+    except OSError:
+        time.sleep(0.2)
 
-    # Wait until Streamlit is reachable
-    wait_for_streamlit()
+# window = webview.create_window(
+#     "Rip Tags",
+#     f"http://localhost:{PORT}",
+#     width=1200,
+#     height=800,
+# )
 
-    # Create native window
-    webview.create_window(
-        title="Rip Tags",
-        url=f"http://127.0.0.1:{PORT}",
-        width=1400,
-        height=900,
-        resizable=True,
-    )
+# window.events.closed += on_closed
 
-    webview.start()
+# webview.start()
