@@ -1,12 +1,13 @@
 import subprocess
 import socket
+import sys
 import time
 import webview
 
 PORT = 8501
 
 streamlit_proc = subprocess.Popen([
-    "streamlit",
+    sys.executable, "-m", "streamlit",
     "run",
     "streamlit_app.py",
     f"--server.port={PORT}",
