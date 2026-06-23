@@ -112,27 +112,19 @@ def render_batch_cleaner(folder_path: Path):
 
     st.divider()
 
-    # Dry run and writes checkboxes
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        dry_run = st.toggle("Preview only", value=True)
-    with col2:
-        confirm_write = st.checkbox("Allow metadata writes", disabled=dry_run)
-
-    # Gear Settings button (triggers st.dialog) on the left of execution button
-    col_gear, col_btn = st.columns([1, 5])
+    # Preview only toggle and settings button
+    col_gear, col_preview, col_btn = st.columns([1, 2, 4])
     with col_gear:
         if st.button("", icon=":material/settings:", use_container_width=True, key="settings_dialog_btn"):
             show_preferences_modal()
+
+    with col_preview:
+        dry_run = st.toggle("Preview only", value=True)
 
     with col_btn:
         run = st.button("Clean Files", type="primary", use_container_width=True)
 
     if run:
-        if not dry_run and not confirm_write:
-            st.warning("Enable metadata writes before cleaning files.")
-            return
-
         # Filter files to clean based on user selections
         files_to_clean = [f for f in files if st.session_state.get(f"clean_checkbox:{f}", True)]
         if not files_to_clean:

@@ -23,6 +23,7 @@ def render_sidebar() -> Path:
             if selected_folder:
                 st.session_state.target_folder = selected_folder
                 st.session_state.pop("selected_file", None)
+                st.rerun()
 
         st.caption("Supported: " + ", ".join(sorted(SUPPORTED_SUFFIXES)))
 
