@@ -9,6 +9,16 @@ from rip_tags.cleaner import SUPPORTED_SUFFIXES
 
 def render_sidebar() -> Path:
     with st.sidebar:
+        _icon_path = Path(__file__).resolve().parent.parent.parent / "Rip-Tags.png"
+        if _icon_path.exists():
+            import base64 as _b64
+            _icon_b64 = _b64.b64encode(_icon_path.read_bytes()).decode()
+            st.markdown(
+                f'<div style="text-align:center;margin-bottom:0.5rem;">'
+                f'<img src="data:image/png;base64,{_icon_b64}" width="180" style="display:inline-block;" />'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
         st.header("Select Folder")
 
         if "target_folder" not in st.session_state:
