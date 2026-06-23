@@ -3,43 +3,7 @@ from pathlib import Path
 import streamlit as st
 
 from rip_tags.cleaner import SUPPORTED_SUFFIXES, CleanResult, clean_file, scan
-
-
-ALL_PREF_TAGS = [
-    # Core (Most Common)
-    "title",
-    "artist",
-    "album",
-    "albumartist",
-    "date",
-    "genre",
-    "tracknumber",
-    "disk",
-    "cover",
-    # Secondary
-    "composer",
-    "copyright",
-    "compilation",
-    # Technical / Metadata
-    "encoder",
-    "lyrics",
-    "comment",
-    "grouping",
-    # iTunes specific / Personal identifiers
-    "purchase date",
-    "apple id",
-    "catalog id",
-    "storefront",
-    "media type",
-    "explicit rating",
-    "gapless playback",
-    # Sorting tags
-    "sort title",
-    "sort artist",
-    "sort album",
-    "sort albumartist",
-    "sort composer",
-]
+from rip_tags.tags import ALL_SUPPORTED_TAGS, RECOMMENDED_TAGS
 
 
 @st.dialog("Clean Preferences")
@@ -47,7 +11,7 @@ def show_preferences_modal():
     st.write("Choose which tags you want to **keep** during the cleaning process. Unchecked tags will be removed.")
 
     # Initialize checkbox widget keys from persistent dict if not present
-    for tag in ALL_PREF_TAGS:
+    for tag in ALL_SUPPORTED_TAGS:
         key = f"pref_checkbox_{tag}"
         if key not in st.session_state:
             st.session_state[key] = st.session_state.keep_tags_preference.get(tag, True)
@@ -55,31 +19,27 @@ def show_preferences_modal():
     col_sel, col_desel, col_rec = st.columns([1, 1, 1.2])
     with col_sel:
         if st.button("Select All", key="pref_select_all", use_container_width=True):
-            for tag in ALL_PREF_TAGS:
+            for tag in ALL_SUPPORTED_TAGS:
                 st.session_state.keep_tags_preference[tag] = True
                 st.session_state[f"pref_checkbox_{tag}"] = True
     with col_desel:
         if st.button("Deselect All", key="pref_deselect_all", use_container_width=True):
-            for tag in ALL_PREF_TAGS:
+            for tag in ALL_SUPPORTED_TAGS:
                 st.session_state.keep_tags_preference[tag] = False
                 st.session_state[f"pref_checkbox_{tag}"] = False
     with col_rec:
         if st.button("Recommended", key="pref_recommended", use_container_width=True):
-            recommended_tags = {
-                "title", "artist", "album", "date", "tracknumber", "genre",
-                "albumartist", "copyright", "composer", "encoder", "cover"
-            }
-            for tag in ALL_PREF_TAGS:
-                st.session_state.keep_tags_preference[tag] = (tag in recommended_tags)
-                st.session_state[f"pref_checkbox_{tag}"] = (tag in recommended_tags)
+            for tag in ALL_SUPPORTED_TAGS:
+                st.session_state.keep_tags_preference[tag] = (tag in RECOMMENDED_TAGS)
+                st.session_state[f"pref_checkbox_{tag}"] = (tag in RECOMMENDED_TAGS)
 
     st.divider()
 
     # Scrollable container for checkboxes
     with st.container(height=350):
         col_left, col_right = st.columns(2)
-        half = (len(ALL_PREF_TAGS) + 1) // 2
-        for idx, tag in enumerate(ALL_PREF_TAGS):
+        half = (len(ALL_SUPPORTED_TAGS) + 1) // 2
+        for idx, tag in enumerate(ALL_SUPPORTED_TAGS):
             display_name = tag.replace("_", " ").title()
             target_col = col_left if idx < half else col_right
             with target_col:
@@ -112,13 +72,9 @@ def render_batch_cleaner(folder_path: Path):
         return
 
     # Initialize persistent preferences dictionary
-    recommended_tags = {
-        "title", "artist", "album", "date", "tracknumber", "genre",
-        "albumartist", "copyright", "composer", "encoder", "cover"
-    }
     if "keep_tags_preference" not in st.session_state:
         st.session_state.keep_tags_preference = {
-            tag: (tag in recommended_tags) for tag in ALL_PREF_TAGS
+            tag: (tag in RECOMMENDED_TAGS) for tag in ALL_SUPPORTED_TAGS
         }
 
     st.write(f"Found **{len(files)}** supported files.")

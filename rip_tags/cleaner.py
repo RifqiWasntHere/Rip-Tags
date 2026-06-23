@@ -5,12 +5,11 @@ from typing import Callable, Optional
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4, MP4Tags
 
+from rip_tags.tags import RECOMMENDED_TAGS
+
 SUPPORTED_SUFFIXES = {".m4a", ".mp4", ".flac"}
 
-DEFAULT_KEEP_TAGS = {
-    "title", "artist", "album", "date", "tracknumber", "genre",
-    "albumartist", "copyright", "composer", "encoder", "cover"
-}
+DEFAULT_KEEP_TAGS = RECOMMENDED_TAGS
 
 
 @dataclass
