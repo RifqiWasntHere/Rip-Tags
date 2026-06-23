@@ -1,3 +1,4 @@
+![Rip Tags Logo](Rip-Tags.png)
 # Rip-Tags (In-Development)
 
 So uhh.. i'm having this problem where, everytime i bought a music from Itunes Store, the tags metadata were overwhelming my Fiio x Snowsky Echo DAP. 
