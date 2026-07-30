@@ -1,191 +1,196 @@
 from pathlib import Path
+from typing import Optional
 
-import streamlit as st
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QFileDialog, QCheckBox, QListWidget, QListWidgetItem,
+    QTableWidget, QTableWidgetItem, QTextEdit, QHeaderView, QProgressBar
+)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap
 
-from rip_tags.cleaner import SUPPORTED_SUFFIXES, CleanResult, clean_file, scan
+from rip_tags.cleaner import SUPPORTED_SUFFIXES, CleanResult
 from rip_tags.tags import ALL_SUPPORTED_TAGS, RECOMMENDED_TAGS
+from rip_tags.ui.preferences import PreferencesDialog
+from rip_tags.ui.worker import ScanWorker, CleanWorker
 
 
-@st.dialog("Clean Preferences")
-def show_preferences_modal():
-    st.write("Choose which tags you want to **keep** during the cleaning process. Unchecked tags will be removed.")
-
-    # Initialize checkbox widget keys from persistent dict if not present
-    for tag in ALL_SUPPORTED_TAGS:
-        key = f"pref_checkbox_{tag}"
-        if key not in st.session_state:
-            st.session_state[key] = st.session_state.keep_tags_preference.get(tag, True)
-
-    col_sel, col_desel, col_rec = st.columns([1, 1, 1.2])
-    with col_sel:
-        if st.button("Select All", key="pref_select_all", use_container_width=True):
-            for tag in ALL_SUPPORTED_TAGS:
-                st.session_state.keep_tags_preference[tag] = True
-                st.session_state[f"pref_checkbox_{tag}"] = True
-    with col_desel:
-        if st.button("Deselect All", key="pref_deselect_all", use_container_width=True):
-            for tag in ALL_SUPPORTED_TAGS:
-                st.session_state.keep_tags_preference[tag] = False
-                st.session_state[f"pref_checkbox_{tag}"] = False
-    with col_rec:
-        if st.button("Recommended", key="pref_recommended", use_container_width=True):
-            for tag in ALL_SUPPORTED_TAGS:
-                st.session_state.keep_tags_preference[tag] = (tag in RECOMMENDED_TAGS)
-                st.session_state[f"pref_checkbox_{tag}"] = (tag in RECOMMENDED_TAGS)
-
-    st.divider()
-
-    # Scrollable container for checkboxes
-    with st.container(height=350):
-        col_left, col_right = st.columns(2)
-        half = (len(ALL_SUPPORTED_TAGS) + 1) // 2
-        for idx, tag in enumerate(ALL_SUPPORTED_TAGS):
-            display_name = tag.replace("_", " ").title()
-            target_col = col_left if idx < half else col_right
-            with target_col:
-                val = st.checkbox(
-                    display_name,
-                    key=f"pref_checkbox_{tag}"
-                )
-                st.session_state.keep_tags_preference[tag] = val
-
-    st.divider()
-    if st.button("Close & Apply", type="primary", use_container_width=True):
-        st.rerun()
-
-
-def render_batch_cleaner(folder_path: Path):
-    st.subheader("Batch Tag Cleaner")
-
-    if not folder_path.exists() or not folder_path.is_dir():
-        st.info("Choose a valid folder in the sidebar to scan for music files.")
-        return
-
-    # Scan the folder to find supported audio files
-    files = sorted([
-        f for f in folder_path.rglob("*")
-        if f.is_file() and f.suffix.lower() in SUPPORTED_SUFFIXES and not f.name.startswith("._")
-    ])
-
-    if not files:
-        st.info("No supported music files found in this folder.")
-        return
-
-    # Initialize persistent preferences dictionary
-    if "keep_tags_preference" not in st.session_state:
-        st.session_state.keep_tags_preference = {
-            tag: (tag in RECOMMENDED_TAGS) for tag in ALL_SUPPORTED_TAGS
-        }
-
-    st.write(f"Found **{len(files)}** supported files.")
-
-    # Initialize checkbox states if not present
-    for f in files:
-        key = f"clean_checkbox:{f}"
-        if key not in st.session_state:
-            st.session_state[key] = True
-
-    st.write("### Choose Files to Clean")
-
-    # Select all / Deselect all buttons positioned below the title
-    col_sel_all, col_desel_all, _ = st.columns([1.5, 1.5, 5])
-    with col_sel_all:
-        if st.button("Select All", use_container_width=True):
-            for f in files:
-                st.session_state[f"clean_checkbox:{f}"] = True
-            st.rerun()
-
-    with col_desel_all:
-        if st.button("Deselect All", use_container_width=True):
-            for f in files:
-                st.session_state[f"clean_checkbox:{f}"] = False
-            st.rerun()
-
-    # Checklist container (scrollable) containing the checkboxes
-    with st.container(height=200):
-        for f in files:
-            rel_path = f.relative_to(folder_path)
-            st.checkbox(
-                str(rel_path),
-                key=f"clean_checkbox:{f}"
-            )
-
-    st.divider()
-
-    # Preview only toggle and settings button
-    col_gear, col_preview, col_btn = st.columns([1, 2, 4])
-    with col_gear:
-        if st.button("", icon=":material/settings:", use_container_width=True, key="settings_dialog_btn"):
-            show_preferences_modal()
-
-    with col_preview:
-        dry_run = st.toggle("Preview only", value=True)
-
-    with col_btn:
-        run = st.button("Clean Files", type="primary", use_container_width=True)
-
-    if run:
-        # Filter files to clean based on user selections
-        files_to_clean = [f for f in files if st.session_state.get(f"clean_checkbox:{f}", True)]
+class BatchCleanerWidget(QWidget):
+    file_selected = Signal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_folder: Optional[Path] = None
+        self.keep_tags_pref: dict = {tag: (tag in RECOMMENDED_TAGS) for tag in ALL_SUPPORTED_TAGS}
+        self.scan_worker: Optional[ScanWorker] = None
+        self.clean_worker: Optional[CleanWorker] = None
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+        
+        header = QLabel("Batch Tag Cleaner")
+        header.setObjectName("title")
+        layout.addWidget(header)
+        
+        self.info_label = QLabel("Select a folder in the sidebar to scan for music files.")
+        layout.addWidget(self.info_label)
+        
+        self.file_list = QListWidget()
+        self.file_list.setSelectionMode(QListWidget.NoSelection)
+        layout.addWidget(self.file_list, 1)
+        
+        list_buttons = QHBoxLayout()
+        
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.clicked.connect(self.select_all_files)
+        list_buttons.addWidget(select_all_btn)
+        
+        deselect_all_btn = QPushButton("Deselect All")
+        deselect_all_btn.clicked.connect(self.deselect_all_files)
+        list_buttons.addWidget(deselect_all_btn)
+        
+        list_buttons.addStretch()
+        layout.addLayout(list_buttons)
+        
+        controls = QHBoxLayout()
+        
+        prefs_btn = QPushButton("⚙ Preferences")
+        prefs_btn.clicked.connect(self.show_preferences)
+        controls.addWidget(prefs_btn)
+        
+        self.preview_checkbox = QCheckBox("Preview only")
+        self.preview_checkbox.setChecked(True)
+        controls.addWidget(self.preview_checkbox)
+        
+        controls.addStretch()
+        
+        self.clean_btn = QPushButton("Clean Files")
+        self.clean_btn.setObjectName("primary")
+        self.clean_btn.clicked.connect(self.clean_files)
+        self.clean_btn.setEnabled(False)
+        controls.addWidget(self.clean_btn)
+        
+        layout.addLayout(controls)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+        
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(5)
+        self.results_table.setHorizontalHeaderLabels(["File", "Status", "Removed", "Kept", "Error"])
+        self.results_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.results_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.results_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.results_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.results_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.results_table.setVisible(False)
+        layout.addWidget(self.results_table)
+        
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMaximumHeight(150)
+        self.log_text.setVisible(False)
+        layout.addWidget(self.log_text)
+    
+    def set_folder(self, folder: str):
+        self.current_folder = Path(folder)
+        self.info_label.setText(f"Scanning: {folder}")
+        self.scan_folder()
+    
+    def scan_folder(self):
+        if not self.current_folder or not self.current_folder.exists():
+            return
+        
+        self.file_list.clear()
+        self.results_table.setVisible(False)
+        self.log_text.setVisible(False)
+        
+        files = sorted([
+            f for f in self.current_folder.rglob("*")
+            if f.is_file() and f.suffix.lower() in SUPPORTED_SUFFIXES and not f.name.startswith("._")
+        ])
+        
+        if not files:
+            self.info_label.setText("No supported music files found in this folder.")
+            self.clean_btn.setEnabled(False)
+            return
+        
+        self.info_label.setText(f"Found {len(files)} supported files.")
+        
+        for file in files:
+            rel_path = file.relative_to(self.current_folder)
+            item = QListWidgetItem(str(rel_path))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            item.setData(Qt.UserRole, str(file))
+            self.file_list.addItem(item)
+        
+        self.clean_btn.setEnabled(True)
+    
+    def select_all_files(self):
+        for i in range(self.file_list.count()):
+            self.file_list.item(i).setCheckState(Qt.Checked)
+    
+    def deselect_all_files(self):
+        for i in range(self.file_list.count()):
+            self.file_list.item(i).setCheckState(Qt.Unchecked)
+    
+    def show_preferences(self):
+        dialog = PreferencesDialog(self.keep_tags_pref, self)
+        if dialog.exec():
+            self.keep_tags_pref = dialog.get_preferences()
+    
+    def clean_files(self):
+        if not self.current_folder:
+            return
+        
+        files_to_clean = []
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            if item.checkState() == Qt.Checked:
+                files_to_clean.append(Path(item.data(Qt.UserRole)))
+        
         if not files_to_clean:
-            st.warning("No files selected to clean.")
             return
-
-        # Collect user-selected tags to keep from persistent dict
-        keep_tags = {tag for tag, keep in st.session_state.keep_tags_preference.items() if keep}
-
-        messages: list[str] = []
-        with st.spinner("Processing selected files..."):
-            results = []
-            for file in files_to_clean:
-                res = clean_file(file, dry_run=dry_run, log_func=messages.append, keep_tags=keep_tags)
-                if res:
-                    results.append(res)
-
-        _render_summary(results)
-
-        if not results:
-            st.info("No files processed.")
-            return
-
-        _render_results_table(results, folder_path)
-        _render_log(messages, results)
-    else:
-        st.info("Choose files and configure preferences above, then click Clean Files.")
-
-
-def _render_summary(results: list[CleanResult]):
-    supported_files = len(results)
-    changed_files = len([item for item in results if item.status in {"would_clean", "cleaned"}])
-    unchanged_files = len([item for item in results if item.status == "unchanged"])
-    failed_files = len([item for item in results if item.status == "failed"])
-    removed_tags = sum(len(item.removed) for item in results)
-
-    metric_cols = st.columns(5)
-    metric_cols[0].metric("Files", supported_files)
-    metric_cols[1].metric("Cleanable", changed_files)
-    metric_cols[2].metric("Unchanged", unchanged_files)
-    metric_cols[3].metric("Failed", failed_files)
-    metric_cols[4].metric("Tags removed", removed_tags)
-
-
-def _render_results_table(results: list[CleanResult], folder_path: Path):
-    rows = [
-        {
-            "file": str(item.path.relative_to(folder_path)),
-            "status": item.status,
-            "removed": ", ".join(item.removed),
-            "kept": ", ".join(item.kept),
-            "error": item.error,
-        }
-        for item in results
-    ]
-
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-
-
-def _render_log(messages: list[str], results: list[CleanResult]):
-    failed_files = len([item for item in results if item.status == "failed"])
-
-    with st.expander("Log", expanded=failed_files > 0):
-        st.code("\n".join(messages) if messages else "No changes.")
+        
+        keep_tags = {tag for tag, keep in self.keep_tags_pref.items() if keep}
+        dry_run = self.preview_checkbox.isChecked()
+        
+        self.clean_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, len(files_to_clean))
+        self.progress_bar.setValue(0)
+        
+        self.clean_worker = CleanWorker(files_to_clean, keep_tags, dry_run)
+        self.clean_worker.file_done.connect(self.on_file_cleaned)
+        self.clean_worker.finished.connect(self.on_clean_finished)
+        self.clean_worker.progress.connect(self.on_clean_progress)
+        self.clean_worker.start()
+    
+    def on_file_cleaned(self, result: CleanResult):
+        if self.progress_bar:
+            self.progress_bar.setValue(self.progress_bar.value() + 1)
+    
+    def on_clean_progress(self, message: str):
+        self.log_text.append(message)
+    
+    def on_clean_finished(self, results: list[CleanResult]):
+        self.clean_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        
+        self.show_results(results)
+    
+    def show_results(self, results: list[CleanResult]):
+        self.results_table.setVisible(True)
+        self.log_text.setVisible(True)
+        
+        self.results_table.setRowCount(len(results))
+        
+        for row, result in enumerate(results):
+            self.results_table.setItem(row, 0, QTableWidgetItem(str(result.path.relative_to(self.current_folder))))
+            self.results_table.setItem(row, 1, QTableWidgetItem(result.status))
+            self.results_table.setItem(row, 2, QTableWidgetItem(", ".join(result.removed)))
+            self.results_table.setItem(row, 3, QTableWidgetItem(", ".join(result.kept)))
+            self.results_table.setItem(row, 4, QTableWidgetItem(result.error))
