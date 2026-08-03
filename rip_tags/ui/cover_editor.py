@@ -4,7 +4,7 @@ from typing import Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QFileDialog, QComboBox, QMessageBox
+    QFileDialog, QComboBox, QMessageBox, QButtonGroup, QRadioButton, QDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QImage
@@ -16,6 +16,7 @@ from rip_tags.cover_art import (
     remove_cover,
     prepare_cover_image,
     resize_cover_image,
+    get_cover_dimensions,
 )
 from rip_tags.ui.components import Card
 
@@ -27,6 +28,7 @@ class CoverEditorWidget(QWidget):
         super().__init__(parent)
         self.audio_info = audio_info
         self.current_cover_data: Optional[bytes] = audio_info.cover_data
+        self.cover_size = DEFAULT_COVER_SIZE
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -34,15 +36,19 @@ class CoverEditorWidget(QWidget):
 
         self.cover_card = Card()
         self.cover_card.layout.setContentsMargins(16, 16, 16, 16)
+        self.cover_card.layout.setSpacing(12)
 
         self.cover_label = QLabel()
-        self.cover_label.setFixedSize(280, 280)
-        self.cover_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.cover_label.setFixedSize(500, 500)
+        self.cover_label.setAlignment(Qt.AlignCenter)
         self.cover_label.setStyleSheet("background: #1e1e1e; border-radius: 12px;")
         self.update_cover_display()
-        self.cover_card.layout.addWidget(
-            self.cover_label, alignment=Qt.AlignLeft | Qt.AlignTop
-        )
+        self.cover_card.layout.addWidget(self.cover_label)
+
+        self.cover_info_label = QLabel()
+        self.cover_info_label.setObjectName("subtitle")
+        self.cover_card.layout.addWidget(self.cover_info_label)
+        self._update_cover_info()
 
         layout.addWidget(self.cover_card)
 
@@ -54,28 +60,32 @@ class CoverEditorWidget(QWidget):
         upload_btn.clicked.connect(self.upload_cover)
         action_bar.addWidget(upload_btn)
 
-        if self.current_cover_data:
-            resize_layout = QHBoxLayout()
-            resize_layout.setSpacing(8)
+        resize_layout = QHBoxLayout()
+        resize_layout.setSpacing(8)
 
-            self.resize_combo = QComboBox()
-            for size in range(500, 1001, 100):
-                self.resize_combo.addItem(f"{size}×{size}", size)
-            self.resize_combo.setCurrentText(f"{DEFAULT_COVER_SIZE}×{DEFAULT_COVER_SIZE}")
-            self.resize_combo.setMinimumWidth(100)
-            resize_layout.addWidget(self.resize_combo)
+        self.resize_combo = QComboBox()
+        for size in range(500, 1001, 100):
+            self.resize_combo.addItem(f"{size}×{size}", size)
+        self.resize_combo.setCurrentText(f"{DEFAULT_COVER_SIZE}×{DEFAULT_COVER_SIZE}")
+        self.resize_combo.setMinimumWidth(100)
+        self.resize_combo.setEnabled(self.current_cover_data is not None)
+        resize_layout.addWidget(self.resize_combo)
 
-            resize_btn = QPushButton("Resize")
-            resize_btn.setObjectName("secondary")
-            resize_btn.clicked.connect(self.resize_cover)
-            resize_layout.addWidget(resize_btn)
+        resize_btn = QPushButton("Resize")
+        resize_btn.setObjectName("secondary")
+        resize_btn.clicked.connect(self.resize_cover)
+        resize_btn.setEnabled(self.current_cover_data is not None)
+        resize_layout.addWidget(resize_btn)
+        self.resize_btn = resize_btn
 
-            action_bar.addLayout(resize_layout)
+        action_bar.addLayout(resize_layout)
 
-            remove_btn = QPushButton("Remove")
-            remove_btn.setObjectName("secondary")
-            remove_btn.clicked.connect(self.remove_cover)
-            action_bar.addWidget(remove_btn)
+        remove_btn = QPushButton("Remove")
+        remove_btn.setObjectName("secondary")
+        remove_btn.clicked.connect(self.remove_cover)
+        remove_btn.setEnabled(self.current_cover_data is not None)
+        action_bar.addWidget(remove_btn)
+        self.remove_btn = remove_btn
 
         action_bar.addStretch()
         layout.addLayout(action_bar)
@@ -85,12 +95,28 @@ class CoverEditorWidget(QWidget):
             image = QImage.fromData(self.current_cover_data)
             if not image.isNull():
                 pixmap = QPixmap.fromImage(image)
-                scaled = pixmap.scaled(260, 260, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                scaled = pixmap.scaled(480, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.cover_label.setPixmap(scaled)
             else:
                 self.cover_label.setText("Failed to load cover")
         else:
             self.cover_label.setText("No cover art")
+
+    def _update_cover_info(self):
+        if self.current_cover_data:
+            try:
+                width, height = get_cover_dimensions(self.current_cover_data)
+                size_kb = len(self.current_cover_data) / 1024
+                self.cover_info_label.setText(f"{width}×{height}  •  {size_kb:.1f} KB")
+            except Exception:
+                self.cover_info_label.setText("Cover art present")
+        else:
+            self.cover_info_label.setText("No cover art")
+
+    def _set_cover_controls_enabled(self, enabled: bool):
+        self.resize_combo.setEnabled(enabled)
+        self.resize_btn.setEnabled(enabled)
+        self.remove_btn.setEnabled(enabled)
 
     def upload_cover(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -103,15 +129,55 @@ class CoverEditorWidget(QWidget):
         if not file_path:
             return
 
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Upload Cover")
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setSpacing(12)
+
+        dialog_layout.addWidget(QLabel("Resize uploaded cover to:"))
+
+        group = QButtonGroup(dialog)
+        resize_radio = QRadioButton("500×500 (recommended)")
+        original_radio = QRadioButton("Keep original size")
+        resize_radio.setChecked(True)
+        group.addButton(resize_radio)
+        group.addButton(original_radio)
+        dialog_layout.addWidget(resize_radio)
+        dialog_layout.addWidget(original_radio)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.close)
+        ok_btn = QPushButton("Upload")
+        ok_btn.setObjectName("primary")
+        ok_btn.clicked.connect(dialog.accept)
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(ok_btn)
+        dialog_layout.addLayout(btn_layout)
+
+        dialog.setMinimumWidth(300)
+        if dialog.exec() != 1:
+            return
+
         try:
             with open(file_path, "rb") as f:
                 image_data = f.read()
 
-            prepared = prepare_cover_image(BytesIO(image_data), DEFAULT_COVER_SIZE, DEFAULT_COVER_SIZE, resize=True)
+            resize = resize_radio.isChecked()
+            width = DEFAULT_COVER_SIZE if resize else None
+            height = DEFAULT_COVER_SIZE if resize else None
+            if width and height:
+                prepared = prepare_cover_image(BytesIO(image_data), width, height, resize=True)
+            else:
+                prepared = prepare_cover_image(BytesIO(image_data), resize=False)
+
             embed_cover(self.audio_info.path, prepared)
 
             self.current_cover_data = prepared
             self.update_cover_display()
+            self._update_cover_info()
+            self._set_cover_controls_enabled(True)
             self.cover_changed.emit()
 
             QMessageBox.information(self, "Success", "Cover art embedded successfully.")
@@ -130,6 +196,7 @@ class CoverEditorWidget(QWidget):
 
             self.current_cover_data = resized
             self.update_cover_display()
+            self._update_cover_info()
             self.cover_changed.emit()
 
             QMessageBox.information(self, "Success", f"Cover resized to {size}×{size}.")
@@ -154,6 +221,8 @@ class CoverEditorWidget(QWidget):
             remove_cover(self.audio_info.path)
             self.current_cover_data = None
             self.update_cover_display()
+            self._update_cover_info()
+            self._set_cover_controls_enabled(False)
             self.cover_changed.emit()
 
             QMessageBox.information(self, "Success", "Cover art removed.")

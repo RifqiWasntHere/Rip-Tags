@@ -15,7 +15,9 @@ ALL_SUPPORTED_TAGS = [
     "date",
     "genre",
     "tracknumber",
+    "tracktotal",
     "disk",
+    "disctotal",
     "cover",
     # Secondary
     "composer",

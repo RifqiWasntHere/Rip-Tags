@@ -260,6 +260,16 @@ QLabel#empty-subtitle {
     color: #a0a0a0;
 }
 
+QLabel#badge {
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #a0a0a0;
+    font-size: 12px;
+    font-weight: 500;
+}
+
 QGroupBox {
     border: 1px solid #2e2e2e;
     border-radius: 12px;
@@ -322,6 +332,40 @@ QDialog {
 
 QDialogButtonBox QPushButton {
     min-width: 100px;
+}
+
+QStatusBar {
+    background-color: #1a1a1a;
+    border-top: 1px solid #2e2e2e;
+    color: #a0a0a0;
+    padding: 4px 16px;
+    font-size: 12px;
+}
+
+QStatusBar::item {
+    border: none;
+}
+
+QRadioButton {
+    spacing: 8px;
+    color: #e8e8e8;
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #4a4a4a;
+    border-radius: 9px;
+    background-color: #1e1e1e;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #4f9cf7;
+    border-color: #4f9cf7;
+}
+
+QRadioButton::indicator:hover {
+    border-color: #4f9cf7;
 }
 
 QToolTip {
