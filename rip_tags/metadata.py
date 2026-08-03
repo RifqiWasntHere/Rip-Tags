@@ -65,29 +65,160 @@ MP4_TAG_MAPPING = {
     "\xa9lyr": "lyrics",
     "\xa9cmt": "comment",
     "\xa9grp": "grouping",
+    "cpil": "compilation",
+    "purd": "purchase date",
+    "apID": "apple id",
+    "cnID": "catalog id",
+    "sfID": "storefront",
+    "stik": "media type",
+    "rtng": "explicit rating",
+    "pgap": "gapless playback",
+    "sonm": "sort title",
+    "soar": "sort artist",
+    "soal": "sort album",
+    "soaa": "sort albumartist",
+    "soco": "sort composer",
+    "disk": "disk",
+    "disc": "disk",
 }
 
 
+FLAC_TAG_MAPPING = {
+    "title": "title",
+    "artist": "artist",
+    "album": "album",
+    "albumartist": "albumartist",
+    "album artist": "albumartist",
+    "date": "date",
+    "year": "date",
+    "genre": "genre",
+    "tracknumber": "tracknumber",
+    "track": "tracknumber",
+    "tracktotal": "tracktotal",
+    "track total": "tracktotal",
+    "disk": "disk",
+    "disc": "disk",
+    "discnumber": "disk",
+    "disctotal": "disctotal",
+    "disc total": "disctotal",
+    "cover": "cover",
+    "composer": "composer",
+    "copyright": "copyright",
+    "compilation": "compilation",
+    "encoder": "encoder",
+    "lyrics": "lyrics",
+    "comment": "comment",
+    "grouping": "grouping",
+    "purchase date": "purchase date",
+    "purchasedate": "purchase date",
+    "itunespurchasedate": "purchase date",
+    "apple id": "apple id",
+    "appleid": "apple id",
+    "itunesaccount": "apple id",
+    "catalog id": "catalog id",
+    "catalogid": "catalog id",
+    "storefront": "storefront",
+    "media type": "media type",
+    "mediatype": "media type",
+    "explicit rating": "explicit rating",
+    "explicitrating": "explicit rating",
+    "gapless playback": "gapless playback",
+    "gaplessplayback": "gapless playback",
+    "sort title": "sort title",
+    "sorttitle": "sort title",
+    "sort artist": "sort artist",
+    "sortartist": "sort artist",
+    "sort album": "sort album",
+    "sortalbum": "sort album",
+    "sort albumartist": "sort albumartist",
+    "sort album artist": "sort albumartist",
+    "sortalbumartist": "sort albumartist",
+    "sort composer": "sort composer",
+    "sortcomposer": "sort composer",
+}
+
+
+TAG_DISPLAY_NAMES = {
+    "title": "Title",
+    "artist": "Artist",
+    "album": "Album",
+    "albumartist": "Album Artist",
+    "date": "Date",
+    "genre": "Genre",
+    "tracknumber": "Track Number",
+    "tracktotal": "Track Total",
+    "disk": "Disc Number",
+    "disctotal": "Disc Total",
+    "cover": "Cover",
+    "composer": "Composer",
+    "copyright": "Copyright",
+    "compilation": "Compilation",
+    "encoder": "Encoder",
+    "lyrics": "Lyrics",
+    "comment": "Comment",
+    "grouping": "Grouping",
+    "purchase date": "Purchase Date",
+    "apple id": "Apple ID",
+    "catalog id": "Catalog ID",
+    "storefront": "Storefront",
+    "media type": "Media Type",
+    "explicit rating": "Explicit Rating",
+    "gapless playback": "Gapless Playback",
+    "sort title": "Sort Title",
+    "sort artist": "Sort Artist",
+    "sort album": "Sort Album",
+    "sort albumartist": "Sort Album Artist",
+    "sort composer": "Sort Composer",
+}
+
+
+def _normalize_tag_name(tag: str) -> str:
+    return tag.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+def to_canonical_tag(tag: str, file_type: str) -> str:
+    tag = str(tag)
+
+    if file_type == "MP4":
+        if tag in MP4_TAG_MAPPING:
+            return MP4_TAG_MAPPING[tag]
+        if tag.lower() in MP4_TAG_MAPPING:
+            return MP4_TAG_MAPPING[tag.lower()]
+        if tag.startswith("----:com.apple.iTunes:"):
+            suffix = tag.split(":", 2)[2]
+            normalized = _normalize_tag_name(suffix)
+            return FLAC_TAG_MAPPING.get(normalized, normalized)
+        if tag.startswith("\xa9"):
+            return "©" + tag[1:]
+        return tag.lower()
+
+    if file_type == "FLAC":
+        normalized = _normalize_tag_name(tag)
+        return FLAC_TAG_MAPPING.get(normalized, normalized)
+
+    return tag.lower()
+
+
+def to_display_name(canonical_tag: str) -> str:
+    return TAG_DISPLAY_NAMES.get(canonical_tag, canonical_tag.replace("_", " ").title())
+
+
 def to_human_tag(tag: str) -> str:
-    # Exact match check
-    if tag in MP4_TAG_MAPPING:
-        return MP4_TAG_MAPPING[tag]
-    # Case insensitive check
-    if tag.lower() in MP4_TAG_MAPPING:
-        return MP4_TAG_MAPPING[tag.lower()]
-    # Normalize unmapped tags starting with copyright symbol
-    if tag.startswith("\xa9"):
-        return "©" + tag[1:]
-    return tag
+    return to_canonical_tag(tag, "MP4")
 
 
 def _read_tags(audio) -> dict[str, Any]:
     if audio.tags is None:
         return {}
 
+    file_type = type(audio).__name__
+
     return {
-        to_human_tag(str(key)): _format_tag_value(value)
-        for key, value in sorted(audio.tags.items(), key=lambda item: to_human_tag(str(item[0])).lower())
+        str(key): _format_tag_value(value)
+        for key, value in sorted(
+            audio.tags.items(),
+            key=lambda item: to_display_name(to_canonical_tag(str(item[0]), file_type)).lower(),
+        )
     }
 
 
@@ -99,7 +230,10 @@ def _format_tag_value(value):
         return ", ".join(_format_tag_value(item) for item in value)
 
     if isinstance(value, bytes):
-        return f"<{len(value)} bytes>"
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError:
+            return f"<{len(value)} bytes>"
 
     return str(value)
 

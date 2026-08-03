@@ -5,6 +5,7 @@ from typing import Callable, Optional
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4, MP4Tags
 
+from rip_tags.metadata import to_canonical_tag
 from rip_tags.tags import RECOMMENDED_TAGS
 
 SUPPORTED_SUFFIXES = {".m4a", ".mp4", ".flac"}
@@ -82,7 +83,7 @@ def _log_result(result: CleanResult, dry_run: bool, log_func: Callable[[str], No
         log_func(f"\n{result.path.name}")
         log_func("Remove:")
         if result.removed:
-            for key in result.removed:
+            for key in dict.fromkeys(result.removed):
                 log_func(f"  {key}")
         else:
             log_func("  Nothing")
@@ -103,11 +104,10 @@ def _clean_mp4(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
 
     original = dict(audio.tags)
 
-    from rip_tags.metadata import to_human_tag
     kept = {}
     for key, value in original.items():
-        human_name = to_human_tag(key)
-        if human_name in keep_tags:
+        canonical = to_canonical_tag(key, "MP4")
+        if canonical in keep_tags:
             kept[key] = value
 
     if "\xa9day" in kept:
@@ -127,8 +127,8 @@ def _clean_mp4(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
     if not removed:
         status = "unchanged"
 
-    kept_human = sorted(to_human_tag(key) for key in kept)
-    removed_human = sorted(to_human_tag(key) for key in removed)
+    kept_human = sorted(to_canonical_tag(key, "MP4") for key in kept)
+    removed_human = sorted(to_canonical_tag(key, "MP4") for key in removed)
 
     return CleanResult(path, status, kept_human, removed_human)
 
@@ -143,7 +143,8 @@ def _clean_flac(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
 
     kept = {}
     for key, value in original.items():
-        if key.lower() in keep_tags:
+        canonical = to_canonical_tag(key, "FLAC")
+        if canonical in keep_tags:
             kept[key] = value
 
     for key in ("date", "year"):
@@ -164,7 +165,7 @@ def _clean_flac(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
     if not removed:
         status = "unchanged"
 
-    kept_human = sorted(key.lower() for key in kept)
-    removed_human = sorted(key.lower() for key in removed)
+    kept_human = sorted(to_canonical_tag(key, "FLAC") for key in kept)
+    removed_human = sorted(to_canonical_tag(key, "FLAC") for key in removed)
 
     return CleanResult(path, status, kept_human, removed_human)
