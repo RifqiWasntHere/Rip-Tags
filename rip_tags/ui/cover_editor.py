@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QComboBox, QMessageBox, QButtonGroup, QRadioButton, QDialog
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QImage, QPixmap
 
 from rip_tags.metadata import AudioInfo
 from rip_tags.cover_art import (
@@ -49,7 +50,7 @@ class CoverEditorWidget(QWidget):
         self.cover_info_label = QLabel()
         self.cover_info_label.setObjectName("subtitle")
         self.cover_card.layout.addWidget(self.cover_info_label)
-        self._update_cover_info()
+        # self._update_cover_info()
 
         layout.addWidget(self.cover_card)
 
@@ -112,7 +113,8 @@ class CoverEditorWidget(QWidget):
             except Exception:
                 self.cover_info_label.setText("Cover art present")
         else:
-            self.cover_info_label.setText("No cover art")
+            # self.cover_info_label.setText("No cover art")
+            return
 
     def _set_cover_controls_enabled(self, enabled: bool):
         self.resize_combo.setEnabled(enabled)
@@ -189,7 +191,7 @@ class CoverEditorWidget(QWidget):
 
             self.current_cover_data = prepared
             self.update_cover_display()
-            self._update_cover_info()
+            # self._update_cover_info()
             self._set_cover_controls_enabled(True)
             self.cover_changed.emit()
 
@@ -251,7 +253,7 @@ class CoverEditorWidget(QWidget):
 
             self.current_cover_data = resized
             self.update_cover_display()
-            self._update_cover_info()
+            # self._update_cover_info()
             self.cover_changed.emit()
 
             QMessageBox.information(self, "Success", f"Cover resized to {size}×{size}.")
@@ -276,7 +278,7 @@ class CoverEditorWidget(QWidget):
             remove_cover(self.audio_info.path)
             self.current_cover_data = None
             self.update_cover_display()
-            self._update_cover_info()
+            # self._update_cover_info()
             self._set_cover_controls_enabled(False)
             self.cover_changed.emit()
 

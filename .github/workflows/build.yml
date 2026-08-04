@@ -9,12 +9,8 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+    name: Build Windows
+    runs-on: windows-latest
 
     steps:
       - name: Check out repository
@@ -25,39 +21,37 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Build macOS app
-        if: runner.os == 'macOS'
-        run: |
-          bash MacOs/setup.sh
-          bash MacOs/build.sh
-
-      - name: Zip macOS app
-        if: runner.os == 'macOS'
-        run: |
-          cd dist
-          zip -r "Rip Tags-macOS.zip" "Rip Tags.app"
-
-      - name: Build Windows exe
-        if: runner.os == 'Windows'
+      - name: Debug Windows environment
         shell: cmd
         run: |
-          "Windows (Unstable)\windows_setup.bat"
-          "Windows (Unstable)\build.bat"
+          echo Current directory:
+          cd
+          echo.
+          echo Files in root:
+          dir
+
+      - name: Run Windows setup
+        shell: cmd
+        run: |
+          call "Windows (Unstable)\windows_setup.bat" || exit /b 1
+
+      - name: Run Windows build
+        shell: cmd
+        run: |
+          call "Windows (Unstable)\build.bat" || exit /b 1
+
+      - name: List dist contents
+        if: always()
+        shell: cmd
+        run: |
+          echo Listing dist directory...
+          dir dist /s /b 2>nul || echo dist directory not found
 
       - name: Zip Windows app
-        if: runner.os == 'Windows'
         run: |
           Compress-Archive -Path "dist\Rip Tags" -DestinationPath "dist\Rip Tags-Windows.zip"
 
-      - name: Upload macOS artifact
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rip-Tags-macOS
-          path: dist/Rip Tags-macOS.zip
-
       - name: Upload Windows artifact
-        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: Rip-Tags-Windows
