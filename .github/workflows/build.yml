@@ -1,0 +1,64 @@
+name: Build Rip Tags
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        run: |
+          bash MacOs/setup.sh
+          bash MacOs/build.sh
+
+      - name: Zip macOS app
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -r "Rip Tags-macOS.zip" "Rip Tags.app"
+
+      - name: Build Windows exe
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          "Windows (Unstable)\windows_setup.bat"
+          "Windows (Unstable)\build.bat"
+
+      - name: Zip Windows app
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path "dist\Rip Tags" -DestinationPath "dist\Rip Tags-Windows.zip"
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rip-Tags-macOS
+          path: dist/Rip Tags-macOS.zip
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rip-Tags-Windows
+          path: dist/Rip Tags-Windows.zip

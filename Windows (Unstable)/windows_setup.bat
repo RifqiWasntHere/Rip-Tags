@@ -11,7 +11,7 @@ if errorlevel 1 (
     echo Python not found.
     echo Install Python from:
     echo https://python.org
-    pause
+    if not "%CI%"=="true" pause
     exit /b
 )
 
@@ -27,4 +27,4 @@ pip install -r requirements.txt
 
 echo.
 echo Setup complete.
-pause
+if not "%CI%"=="true" pause

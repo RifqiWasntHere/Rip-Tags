@@ -1,130 +1,202 @@
+import json
 from pathlib import Path
-import platform
-import subprocess
 
-import streamlit as st
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QFileDialog, QTreeWidget, QTreeWidgetItem, QHeaderView, QListWidget, QListWidgetItem,
+    QStyle
+)
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QPixmap
 
 from rip_tags.cleaner import SUPPORTED_SUFFIXES
+from rip_tags.ui.components import Card, EmptyState, svg_icon
 
 
-def render_sidebar() -> Path:
-    with st.sidebar:
-        _icon_path = Path(__file__).resolve().parent.parent.parent / "Rip-Tags.png"
-        if _icon_path.exists():
-            import base64 as _b64
-            _icon_b64 = _b64.b64encode(_icon_path.read_bytes()).decode()
-            st.markdown(
-                f'<div style="text-align:center;margin-bottom:0.5rem;">'
-                f'<img src="data:image/png;base64,{_icon_b64}" width="180" style="display:inline-block;" />'
-                f'</div>',
-                unsafe_allow_html=True,
+RECENT_FOLDERS_FILE = Path.home() / ".rip_tags_recent.json"
+MAX_RECENT_FOLDERS = 10
+
+
+class SidebarWidget(QWidget):
+    folder_selected = Signal(str)
+    file_selected = Signal(str)
+    preferences_requested = Signal()
+
+    def __init__(self, icon_path: Path, parent=None):
+        super().__init__(parent)
+        self.icon_path = icon_path
+        self.current_folder = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
+
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(0)
+        header_layout.addStretch()
+
+        if icon_path.exists():
+            icon_label = QLabel()
+            pixmap = QPixmap(str(icon_path))
+            if not pixmap.isNull():
+                scaled = pixmap.scaledToWidth(92, Qt.SmoothTransformation)
+                icon_label.setPixmap(scaled)
+        else:
+            icon_label = QLabel("♪")
+            icon_label.setStyleSheet("font-size: 64px; color: #4f9cf7;")
+
+        icon_label.setAlignment(Qt.AlignCenter)
+        header_layout.addWidget(icon_label)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+
+        self.folder_card = Card()
+        self.folder_card.layout.setContentsMargins(12, 12, 12, 12)
+        self.folder_card.layout.setSpacing(8)
+
+        self.folder_label = QLabel("No folder selected")
+        self.folder_label.setObjectName("subtitle")
+        self.folder_label.setWordWrap(True)
+        self.folder_card.layout.addWidget(self.folder_label)
+
+        self.folder_count_label = QLabel("0 files")
+        self.folder_count_label.setObjectName("metric-label")
+        self.folder_count_label.setStyleSheet("font-size: 11px; color: #808080;")
+        self.folder_card.layout.addWidget(self.folder_count_label)
+
+        browse_btn = QPushButton("Open Folder")
+        browse_btn.setObjectName("primary")
+        browse_btn.clicked.connect(self.browse_folder)
+        self.folder_card.layout.addWidget(browse_btn)
+
+        layout.addWidget(self.folder_card)
+
+        recent_header = QLabel("Recent Folders")
+        recent_header.setObjectName("section-title")
+        layout.addWidget(recent_header)
+
+        self.recent_list = QListWidget()
+        self.recent_list.setMaximumHeight(120)
+        self.recent_list.itemClicked.connect(self.on_recent_clicked)
+        self.load_recent_folders()
+        layout.addWidget(self.recent_list)
+
+        tree_header = QLabel("Folder Tree")
+        tree_header.setObjectName("section-title")
+        layout.addWidget(tree_header)
+
+        self.tree = QTreeWidget()
+        self.tree.setObjectName("sidebar_tree")
+        self.tree.setHeaderHidden(True)
+        self.tree.setIconSize(QSize(40, 40))
+        self.tree.itemClicked.connect(self.on_tree_item_clicked)
+        layout.addWidget(self.tree, 1)
+
+        self.empty_state = EmptyState(
+            "folder",
+            "No Folder Selected",
+            "Open a folder to start cleaning tags."
+        )
+        self.empty_state.setVisible(False)
+        layout.addWidget(self.empty_state, 1)
+
+        prefs_btn = QPushButton("Preferences")
+        prefs_btn.setObjectName("secondary")
+        prefs_btn.clicked.connect(self.preferences_requested.emit)
+        layout.addWidget(prefs_btn)
+    
+    def browse_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder")
+        if folder:
+            self.set_folder(folder)
+
+    def set_folder(self, folder: str):
+        self.current_folder = folder
+        self.folder_label.setText(folder)
+        self.add_recent_folder(folder)
+        self.folder_selected.emit(folder)
+        self.populate_tree(Path(folder))
+
+    def set_file_count(self, count: int):
+        self.folder_count_label.setText(f"{count} files")
+
+    def populate_tree(self, folder_path: Path):
+        self.tree.clear()
+        file_count = self._add_directory_items(self.tree.invisibleRootItem(), folder_path, depth=0, max_depth=3)
+        self.folder_count_label.setText(f"{file_count} files")
+        self.empty_state.setVisible(file_count == 0)
+        self.tree.setVisible(file_count > 0)
+
+    def _add_directory_items(self, parent_item: QTreeWidgetItem, folder_path: Path, depth: int, max_depth: int) -> int:
+        if depth >= max_depth:
+            return 0
+
+        file_count = 0
+        try:
+            entries = sorted(
+                [e for e in folder_path.iterdir() if not e.name.startswith(".")],
+                key=lambda e: (not e.is_dir(), e.name.lower())
             )
-        st.header("Select Folder")
+        except PermissionError:
+            return 0
 
-        if "target_folder" not in st.session_state:
-            st.session_state.target_folder = str(Path("target"))
+        for entry in entries[:100]:
+            if entry.is_dir():
+                item = QTreeWidgetItem(parent_item)
+                item.setText(0, entry.name)
+                item.setIcon(0, self.style().standardIcon(QStyle.SP_DirIcon))
+                item.setData(0, Qt.UserRole, str(entry))
+                item.setData(0, Qt.UserRole + 1, "folder")
+                file_count += self._add_directory_items(item, entry, depth + 1, max_depth)
+            elif entry.suffix.lower() in SUPPORTED_SUFFIXES:
+                item = QTreeWidgetItem(parent_item)
+                item.setText(0, entry.name)
+                item.setIcon(0, svg_icon("music", size=20))
+                item.setData(0, Qt.UserRole, str(entry))
+                item.setData(0, Qt.UserRole + 1, "file")
+                file_count += 1
 
-        folder = st.session_state.target_folder
-        st.code(folder, language=None)
+        return file_count
 
-        if st.button("Browse folder", use_container_width=True):
-            selected_folder = _browse_folder(st.session_state.target_folder)
+    def on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
+        path_str = item.data(0, Qt.UserRole)
+        if path_str:
+            path = Path(path_str)
+            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
+                self.file_selected.emit(path_str)
 
-            if selected_folder:
-                st.session_state.target_folder = selected_folder
-                st.session_state.pop("selected_file", None)
-                st.rerun()
+    def on_recent_clicked(self, item: QListWidgetItem):
+        folder = item.data(Qt.UserRole)
+        if folder:
+            self.set_folder(folder)
 
-        st.caption("Supported: " + ", ".join(sorted(SUPPORTED_SUFFIXES)))
+    def load_recent_folders(self):
+        self.recent_list.clear()
+        if not RECENT_FOLDERS_FILE.exists():
+            return
+        try:
+            data = json.loads(RECENT_FOLDERS_FILE.read_text())
+            folders = [f for f in data if isinstance(f, str) and Path(f).exists()]
+            for folder in folders[:MAX_RECENT_FOLDERS]:
+                item = QListWidgetItem(Path(folder).name)
+                item.setData(Qt.UserRole, folder)
+                item.setToolTip(folder)
+                self.recent_list.addItem(item)
+        except Exception:
+            pass
 
-        st.divider()
-
-        folder_path = Path(folder).expanduser()
-        st.header("Folder Tree")
-
-        if not folder_path.exists() or not folder_path.is_dir():
-            st.info("Select a valid folder.")
-        else:   
-            _render_folder_tree(folder_path)
-
-    return folder_path
-
-
-def _browse_folder(initial_folder: str) -> str:
-    if platform.system() != "Darwin":
-        st.error("Folder browsing is currently only available on macOS.")
-        return ""
-
-    initial_path = Path(initial_folder).expanduser()
-
-    if not initial_path.exists():
-        initial_path = Path.home()
-    else:
-        initial_path = initial_path.resolve()
-
-    initial_path_text = str(initial_path).replace('"', '\\"')
-
-    script = (
-        'POSIX path of (choose folder '
-        f'with prompt "Choose target folder" default location POSIX file "{initial_path_text}")'
-    )
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-    except Exception as e:
-        st.error(f"Could not open folder browser: {e}")
-        return ""
-
-    if result.returncode == 1 and "User canceled" in result.stderr:
-        return ""
-
-    if result.returncode != 0:
-        st.error(result.stderr.strip() or "Could not open folder browser.")
-        return ""
-
-    return result.stdout.strip()
-
-
-def _render_folder_tree(folder_path: Path):
-    _render_directory(folder_path, depth=0)
-
-
-def _render_directory(folder_path: Path, depth: int, max_depth=4, max_entries=160):
-    if depth >= max_depth:
-        st.caption("...")
-        return
-
-    try:
-        entries = sorted(
-            [entry for entry in folder_path.iterdir() if not entry.name.startswith(".")],
-            key=lambda entry: (entry.is_file(), entry.name.lower()),
-        )
-    except OSError:
-        st.caption("Cannot read folder.")
-        return
-
-    for entry in entries[:max_entries]:
-        if entry.is_dir():
-            with st.expander(entry.name, expanded=depth == 0):
-                _render_directory(entry, depth + 1, max_depth=max_depth, max_entries=max_entries)
-            continue
-
-        if entry.suffix.lower() not in SUPPORTED_SUFFIXES:
-            continue
-
-        selected = st.session_state.get("selected_file") == str(entry)
-        label = entry.name
-
-        if selected:
-            label = f"> {label}"
-
-        if st.button(label, key=f"file:{entry}", use_container_width=True):
-            st.session_state.selected_file = str(entry)
-
-    if len(entries) > max_entries:
-        st.caption(f"{len(entries) - max_entries} more items hidden")
+    def add_recent_folder(self, folder: str):
+        folders = []
+        if RECENT_FOLDERS_FILE.exists():
+            try:
+                folders = json.loads(RECENT_FOLDERS_FILE.read_text())
+            except Exception:
+                pass
+        folders = [f for f in folders if f != folder]
+        folders.insert(0, folder)
+        folders = folders[:MAX_RECENT_FOLDERS]
+        try:
+            RECENT_FOLDERS_FILE.write_text(json.dumps(folders))
+        except Exception:
+            pass
+        self.load_recent_folders()
