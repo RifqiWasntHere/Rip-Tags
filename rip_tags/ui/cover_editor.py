@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QFileDialog, QComboBox, QMessageBox, QButtonGroup, QRadioButton, QDialog
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap, QImage
 
 from rip_tags.metadata import AudioInfo
 from rip_tags.cover_art import (
@@ -44,6 +43,8 @@ class CoverEditorWidget(QWidget):
         self.cover_label.setStyleSheet("background: #1e1e1e; border-radius: 12px;")
         self.update_cover_display()
         self.cover_card.layout.addWidget(self.cover_label)
+
+        self.setAcceptDrops(True)
 
         self.cover_info_label = QLabel()
         self.cover_info_label.setObjectName("subtitle")
@@ -129,12 +130,24 @@ class CoverEditorWidget(QWidget):
         if not file_path:
             return
 
+        action = "Replace" if self.current_cover_data else "Add"
+        accepted, resize = self._confirm_cover_embed(
+            f"{action} Cover Art",
+            f"Resize uploaded cover for {self.audio_info.path.name}:",
+            action
+        )
+        if not accepted:
+            return
+
+        self._embed_image(file_path, resize)
+
+    def _confirm_cover_embed(self, title: str, message: str, action: str) -> tuple[bool, bool]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Upload Cover")
+        dialog.setWindowTitle(title)
         dialog_layout = QVBoxLayout(dialog)
         dialog_layout.setSpacing(12)
 
-        dialog_layout.addWidget(QLabel("Resize uploaded cover to:"))
+        dialog_layout.addWidget(QLabel(message))
 
         group = QButtonGroup(dialog)
         resize_radio = QRadioButton("500×500 (recommended)")
@@ -148,8 +161,8 @@ class CoverEditorWidget(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(dialog.close)
-        ok_btn = QPushButton("Upload")
+        cancel_btn.clicked.connect(dialog.reject)
+        ok_btn = QPushButton(action)
         ok_btn.setObjectName("primary")
         ok_btn.clicked.connect(dialog.accept)
         btn_layout.addWidget(cancel_btn)
@@ -157,14 +170,14 @@ class CoverEditorWidget(QWidget):
         dialog_layout.addLayout(btn_layout)
 
         dialog.setMinimumWidth(300)
-        if dialog.exec() != 1:
-            return
+        accepted = dialog.exec() == 1
+        return accepted, resize_radio.isChecked()
 
+    def _embed_image(self, file_path: str, resize: bool):
         try:
             with open(file_path, "rb") as f:
                 image_data = f.read()
 
-            resize = resize_radio.isChecked()
             width = DEFAULT_COVER_SIZE if resize else None
             height = DEFAULT_COVER_SIZE if resize else None
             if width and height:
@@ -183,6 +196,48 @@ class CoverEditorWidget(QWidget):
             QMessageBox.information(self, "Success", "Cover art embedded successfully.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to embed cover: {str(e)}")
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and self._is_image_file(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and self._is_image_file(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        file_path = None
+        for url in event.mimeData().urls():
+            candidate = url.toLocalFile()
+            if self._is_image_file(candidate):
+                file_path = candidate
+                break
+
+        if not file_path:
+            event.ignore()
+            return
+
+        event.acceptProposedAction()
+
+        action = "Replace" if self.current_cover_data else "Add"
+        accepted, resize = self._confirm_cover_embed(
+            f"{action} Cover Art",
+            f"Use the dropped image to {action.lower()} the cover art for {self.audio_info.path.name}?",
+            action
+        )
+        if accepted:
+            self._embed_image(file_path, resize)
+
+    def _is_image_file(self, file_path: str) -> bool:
+        return Path(file_path).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
 
     def resize_cover(self):
         if not self.current_cover_data:

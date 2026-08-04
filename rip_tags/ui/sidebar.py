@@ -3,13 +3,14 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QFileDialog, QTreeWidget, QTreeWidgetItem, QHeaderView, QListWidget, QListWidgetItem
+    QFileDialog, QTreeWidget, QTreeWidgetItem, QHeaderView, QListWidget, QListWidgetItem,
+    QStyle
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap
 
 from rip_tags.cleaner import SUPPORTED_SUFFIXES
-from rip_tags.ui.components import Card, EmptyState, TextOnlySelectionDelegate
+from rip_tags.ui.components import Card, EmptyState, svg_icon
 
 
 RECENT_FOLDERS_FILE = Path.home() / ".rip_tags_recent.json"
@@ -31,25 +32,21 @@ class SidebarWidget(QWidget):
         layout.setSpacing(16)
 
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
+        header_layout.setSpacing(0)
+        header_layout.addStretch()
 
         if icon_path.exists():
             icon_label = QLabel()
             pixmap = QPixmap(str(icon_path))
             if not pixmap.isNull():
-                scaled = pixmap.scaledToWidth(32, Qt.SmoothTransformation)
+                scaled = pixmap.scaledToWidth(92, Qt.SmoothTransformation)
                 icon_label.setPixmap(scaled)
         else:
             icon_label = QLabel("♪")
-            icon_label.setStyleSheet("font-size: 24px; color: #4f9cf7;")
+            icon_label.setStyleSheet("font-size: 64px; color: #4f9cf7;")
 
+        icon_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(icon_label)
-
-        title_label = QLabel("Rip Tags")
-        title_label.setObjectName("title")
-        title_label.setStyleSheet("font-size: 18px;")
-        header_layout.addWidget(title_label)
-
         header_layout.addStretch()
         layout.addLayout(header_layout)
 
@@ -80,7 +77,6 @@ class SidebarWidget(QWidget):
 
         self.recent_list = QListWidget()
         self.recent_list.setMaximumHeight(120)
-        self.recent_list.setItemDelegate(TextOnlySelectionDelegate(self.recent_list))
         self.recent_list.itemClicked.connect(self.on_recent_clicked)
         self.load_recent_folders()
         layout.addWidget(self.recent_list)
@@ -90,8 +86,9 @@ class SidebarWidget(QWidget):
         layout.addWidget(tree_header)
 
         self.tree = QTreeWidget()
+        self.tree.setObjectName("sidebar_tree")
         self.tree.setHeaderHidden(True)
-        self.tree.setItemDelegate(TextOnlySelectionDelegate(self.tree))
+        self.tree.setIconSize(QSize(40, 40))
         self.tree.itemClicked.connect(self.on_tree_item_clicked)
         layout.addWidget(self.tree, 1)
 
@@ -147,12 +144,14 @@ class SidebarWidget(QWidget):
             if entry.is_dir():
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, entry.name)
+                item.setIcon(0, self.style().standardIcon(QStyle.SP_DirIcon))
                 item.setData(0, Qt.UserRole, str(entry))
                 item.setData(0, Qt.UserRole + 1, "folder")
                 file_count += self._add_directory_items(item, entry, depth + 1, max_depth)
             elif entry.suffix.lower() in SUPPORTED_SUFFIXES:
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, entry.name)
+                item.setIcon(0, svg_icon("music", size=20))
                 item.setData(0, Qt.UserRole, str(entry))
                 item.setData(0, Qt.UserRole + 1, "file")
                 file_count += 1

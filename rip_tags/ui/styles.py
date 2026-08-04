@@ -10,6 +10,10 @@ QWidget {
     font-size: 13px;
 }
 
+QLabel {
+    background-color: transparent;
+}
+
 QSplitter::handle {
     background-color: #1e1e1e;
 }
@@ -88,8 +92,8 @@ QPushButton#flat:hover {
 }
 
 QLineEdit, QSpinBox, QComboBox {
-    background-color: #1e1e1e;
-    border: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+    border: 1px solid #5a5a5a;
     border-radius: 8px;
     padding: 8px 12px;
     color: #e8e8e8;
@@ -97,6 +101,13 @@ QLineEdit, QSpinBox, QComboBox {
 
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
     border-color: #4f9cf7;
+    background-color: #404040;
+}
+
+QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled {
+    background-color: #252525;
+    border-color: #3a3a3a;
+    color: #808080;
 }
 
 QComboBox::drop-down {
@@ -105,8 +116,8 @@ QComboBox::drop-down {
 }
 
 QComboBox QAbstractItemView {
-    background-color: #1e1e1e;
-    border: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+    border: 1px solid #5a5a5a;
     border-radius: 8px;
     selection-background-color: #4f9cf7;
     padding: 4px;
@@ -154,8 +165,61 @@ QTreeWidget::item:hover, QListWidget::item:hover, QTableWidget::item:hover {
 }
 
 QTreeWidget::item:selected, QListWidget::item:selected, QTableWidget::item:selected {
-    background-color: transparent;
+    background-color: #4f9cf7;
     color: #ffffff;
+}
+
+QTreeWidget::item:selected:active, QListWidget::item:selected:active, QTableWidget::item:selected:active {
+    background-color: #4f9cf7;
+}
+
+QTreeWidget::item:selected:!active, QListWidget::item:selected:!active, QTableWidget::item:selected:!active {
+    background-color: #3a7bc8;
+}
+
+#sidebar_tree {
+    background-color: #1a1a1a;
+    border: 1px solid #2e2e2e;
+    border-radius: 12px;
+    outline: none;
+    padding: 4px;
+}
+
+#sidebar_tree::item {
+    padding: 8px 4px;
+    border: none;
+    border-radius: 0px;
+    margin: 0px;
+}
+
+#sidebar_tree::item:hover {
+    background-color: #252525;
+}
+
+#sidebar_tree::item:selected {
+    background-color: #4f9cf7;
+    color: #ffffff;
+}
+
+#sidebar_tree::item:selected:active {
+    background-color: #4f9cf7;
+}
+
+#sidebar_tree::item:selected:!active {
+    background-color: #3a7bc8;
+}
+
+#sidebar_tree QTreeView::branch {
+    background: transparent;
+    border: none;
+}
+
+#sidebar_tree QTreeView::branch:selected {
+    background-color: #4f9cf7;
+}
+
+#sidebar_tree QTreeView::branch:selected:!active {
+    background-color: #3a7bc8;
 }
 
 QHeaderView::section {

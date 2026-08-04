@@ -16,6 +16,9 @@ fi
 echo "Installing PyInstaller..."
 "$VENV_PIP" install --quiet pyinstaller
 
+echo "Generating app icons..."
+"$VENV_PYTHON" build_icons.py
+
 echo "Cleaning previous build..."
 rm -rf build dist
 
@@ -23,8 +26,11 @@ echo "Building Rip Tags.app..."
 "$VENV_PYTHON" -m PyInstaller rip_tags.spec --noconfirm
 
 APP_PATH="$ROOT_DIR/dist/Rip Tags.app"
+COLLECT_DIR="$ROOT_DIR/dist/Rip Tags"
 
 if [[ -d "$APP_PATH" ]]; then
+  # Remove the loose COLLECT folder; only the .app bundle is needed on macOS.
+  rm -rf "$COLLECT_DIR"
   echo ""
   echo "Build successful!"
   echo "App location: $APP_PATH"

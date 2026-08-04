@@ -12,4 +12,4 @@ if [[ ! -x "$VENV_PYTHON" ]]; then
 fi
 
 cd "$ROOT_DIR"
-exec "$VENV_PYTHON" launcher.py
+exec "$VENV_PYTHON" app_entry.py

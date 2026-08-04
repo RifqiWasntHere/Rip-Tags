@@ -4,4 +4,4 @@ cd /d "%~dp0"
 
 call .venv\Scripts\activate.bat
 
-python launcher.py
+python app_entry.py

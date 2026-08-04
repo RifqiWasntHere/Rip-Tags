@@ -1,15 +1,34 @@
 import os
+import sys
 import glob
 
 block_cipher = None
 
 ROOT = os.path.abspath('.')
 VENV = os.path.join(ROOT, '.venv')
-SITE_PACKAGES = os.path.join(VENV, 'lib', 'python3.9', 'site-packages')
+
+# Find the correct site-packages directory regardless of Python version
+SITE_PACKAGES = None
+for py_dir in os.listdir(os.path.join(VENV, 'lib')):
+    candidate = os.path.join(VENV, 'lib', py_dir, 'site-packages')
+    if os.path.isdir(candidate):
+        SITE_PACKAGES = candidate
+        break
+
+if SITE_PACKAGES is None:
+    raise RuntimeError("Could not find virtual environment site-packages")
 
 import PySide6
 
 pyside_pkg = os.path.dirname(PySide6.__file__)
+
+# Use platform-specific icon formats for best results
+if sys.platform == 'darwin':
+    APP_ICON = os.path.join(ROOT, 'Rip-Tags.icns')
+elif sys.platform == 'win32':
+    APP_ICON = os.path.join(ROOT, 'Rip-Tags.ico')
+else:
+    APP_ICON = os.path.join(ROOT, 'Rip-Tags.png')
 
 def collect_dist_info(package_name):
     pattern = os.path.join(SITE_PACKAGES, f'{package_name}*.dist-info')
@@ -85,7 +104,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(ROOT, 'Rip-Tags.png'),
+    icon=APP_ICON,
 )
 
 coll = COLLECT(
@@ -102,7 +121,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='Rip Tags.app',
-    icon=os.path.join(ROOT, 'Rip-Tags.png'),
+    icon=APP_ICON,
     bundle_identifier='com.riptags.app',
     info_plist={
         'CFBundleShortVersionString': '0.1.0',
