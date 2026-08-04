@@ -1,215 +1,285 @@
 from pathlib import Path
+from io import BytesIO
 from typing import Optional
 
-import streamlit as st
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QFileDialog, QComboBox, QMessageBox, QButtonGroup, QRadioButton, QDialog
+)
+from PySide6.QtCore import Qt, Signal
 
+from rip_tags.metadata import AudioInfo
 from rip_tags.cover_art import (
     DEFAULT_COVER_SIZE,
     embed_cover,
-    get_cover_dimensions,
-    prepare_cover_image,
     remove_cover,
+    prepare_cover_image,
     resize_cover_image,
+    get_cover_dimensions,
 )
-from rip_tags.metadata import AudioInfo
-
-COVER_SIZE_OPTIONS = list(range(500, 1001, 100))
+from rip_tags.ui.components import Card
 
 
-def render_cover_editor(info: AudioInfo):
-    has_cover = bool(info.cover_data)
-    size_options = [f"{size}x{size}" for size in COVER_SIZE_OPTIONS]
+class CoverEditorWidget(QWidget):
+    cover_changed = Signal()
 
-    action_cols = st.columns([6, 1])
+    def __init__(self, audio_info: AudioInfo, parent=None):
+        super().__init__(parent)
+        self.audio_info = audio_info
+        self.current_cover_data: Optional[bytes] = audio_info.cover_data
+        self.cover_size = DEFAULT_COVER_SIZE
 
-    with action_cols[1]:
-        with st.popover("", icon=":material/more_vert:"):
-            st.markdown("### Cover")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
-            if has_cover:
-                cover_action = st.radio(
-                    "Choose cover action",
-                    options=["Replace album cover", "Resize album cover"],
-                    horizontal=True,
-                    key=f"cover-action:{info.path}",
-                )
+        self.cover_card = Card()
+        self.cover_card.layout.setContentsMargins(16, 16, 16, 16)
+        self.cover_card.layout.setSpacing(12)
 
-                if cover_action == "Resize album cover":
-                    _render_current_cover_resize(info, size_options)
-                else:
-                    _render_replacement_cover_upload(info, size_options)
-                    st.divider()
-                    _render_remove_cover_button(info)
+        self.cover_label = QLabel()
+        self.cover_label.setFixedSize(500, 500)
+        self.cover_label.setAlignment(Qt.AlignCenter)
+        self.cover_label.setStyleSheet("background: #1e1e1e; border-radius: 12px;")
+        self.update_cover_display()
+        self.cover_card.layout.addWidget(self.cover_label)
+
+        self.setAcceptDrops(True)
+
+        self.cover_info_label = QLabel()
+        self.cover_info_label.setObjectName("subtitle")
+        self.cover_card.layout.addWidget(self.cover_info_label)
+        self._update_cover_info()
+
+        layout.addWidget(self.cover_card)
+
+        action_bar = QHBoxLayout()
+        action_bar.setSpacing(8)
+
+        upload_btn = QPushButton("Upload")
+        upload_btn.setObjectName("primary")
+        upload_btn.clicked.connect(self.upload_cover)
+        action_bar.addWidget(upload_btn)
+
+        resize_layout = QHBoxLayout()
+        resize_layout.setSpacing(8)
+
+        self.resize_combo = QComboBox()
+        for size in range(500, 1001, 100):
+            self.resize_combo.addItem(f"{size}×{size}", size)
+        self.resize_combo.setCurrentText(f"{DEFAULT_COVER_SIZE}×{DEFAULT_COVER_SIZE}")
+        self.resize_combo.setMinimumWidth(100)
+        self.resize_combo.setEnabled(self.current_cover_data is not None)
+        resize_layout.addWidget(self.resize_combo)
+
+        resize_btn = QPushButton("Resize")
+        resize_btn.setObjectName("secondary")
+        resize_btn.clicked.connect(self.resize_cover)
+        resize_btn.setEnabled(self.current_cover_data is not None)
+        resize_layout.addWidget(resize_btn)
+        self.resize_btn = resize_btn
+
+        action_bar.addLayout(resize_layout)
+
+        remove_btn = QPushButton("Remove")
+        remove_btn.setObjectName("secondary")
+        remove_btn.clicked.connect(self.remove_cover)
+        remove_btn.setEnabled(self.current_cover_data is not None)
+        action_bar.addWidget(remove_btn)
+        self.remove_btn = remove_btn
+
+        action_bar.addStretch()
+        layout.addLayout(action_bar)
+
+    def update_cover_display(self):
+        if self.current_cover_data:
+            image = QImage.fromData(self.current_cover_data)
+            if not image.isNull():
+                pixmap = QPixmap.fromImage(image)
+                scaled = pixmap.scaled(480, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.cover_label.setPixmap(scaled)
             else:
-                _render_replacement_cover_upload(info, size_options)
-
-    with action_cols[0]:
-        if has_cover:
-            st.image(info.cover_data, use_container_width=True)
+                self.cover_label.setText("Failed to load cover")
         else:
-            st.markdown(
-                '<div class="cover-empty-label">No album cover</div>',
-                unsafe_allow_html=True,
-            )
+            self.cover_label.setText("No cover art")
 
-
-def _render_replacement_cover_upload(info: AudioInfo, size_options: list[str]):
-    uploaded_cover = st.file_uploader(
-        "Upload album cover",
-        type=["jpg", "jpeg", "png", "webp"],
-        key=f"cover-upload:{info.path}",
-    )
-
-    resize_cover = st.checkbox(
-        "Resize uploaded cover",
-        value=True,
-        key=f"cover-resize:{info.path}",
-    )
-    selected_size = st.selectbox(
-        "Uploaded cover size",
-        options=size_options,
-        index=size_options.index(f"{DEFAULT_COVER_SIZE}x{DEFAULT_COVER_SIZE}"),
-        disabled=not resize_cover,
-        key=f"cover-size:{info.path}",
-    )
-
-    if uploaded_cover:
-        try:
-            cover_size = int(selected_size.split("x", 1)[0])
-            cover_data = prepare_cover_image(
-                uploaded_cover,
-                width=cover_size,
-                height=cover_size,
-                resize=resize_cover,
-            )
-        except Exception as e:
-            st.error(f"Could not prepare cover image: {e}")
+    def _update_cover_info(self):
+        if self.current_cover_data:
+            try:
+                width, height = get_cover_dimensions(self.current_cover_data)
+                size_kb = len(self.current_cover_data) / 1024
+                self.cover_info_label.setText(f"{width}×{height}  •  {size_kb:.1f} KB")
+            except Exception:
+                self.cover_info_label.setText("Cover art present")
         else:
-            caption = (
-                f"Uploaded preview: {selected_size}"
-                if resize_cover
-                else "Uploaded preview: original size"
-            )
-            st.image(cover_data, caption=caption, use_container_width=True)
+            self.cover_info_label.setText("No cover art")
 
-            apply_label = "Replace album cover" if info.cover_data else "Add album cover"
-            if st.button(
-                apply_label,
-                type="primary",
-                key=f"apply-cover:{info.path}",
-                use_container_width=True,
-            ):
-                try:
-                    embed_cover(info.path, cover_data)
-                    st.session_state.cover_status = {
-                        "path": str(info.path),
-                        "type": "success",
-                        "message": "Cover art embedded.",
-                    }
-                    st.rerun()
-                except Exception as e:
-                    st.session_state.cover_status = {
-                        "path": str(info.path),
-                        "type": "error",
-                        "message": f"Could not embed cover art: {e}",
-                    }
-                    st.rerun()
+    def _set_cover_controls_enabled(self, enabled: bool):
+        self.resize_combo.setEnabled(enabled)
+        self.resize_btn.setEnabled(enabled)
+        self.remove_btn.setEnabled(enabled)
 
-
-def _render_current_cover_resize(info: AudioInfo, size_options: list[str]):
-    try:
-        current_width, current_height = get_cover_dimensions(info.cover_data)
-    except Exception as e:
-        st.caption(f"Current size: unknown ({e})")
-        current_width = current_height = None
-    else:
-        st.caption(f"Current size: {current_width}x{current_height}")
-
-    embedded_size = st.selectbox(
-        "Embedded cover size",
-        options=size_options,
-        index=_default_cover_size_index(current_width, current_height, size_options),
-        key=f"embedded-cover-size:{info.path}",
-    )
-    target_size = int(embedded_size.split("x", 1)[0])
-    is_current_size = current_width == target_size and current_height == target_size
-    is_upscaling = (
-        current_width is not None
-        and current_height is not None
-        and (target_size > current_width or target_size > current_height)
-    )
-
-    allow_upscaling = False
-    if is_current_size:
-        st.caption(f"The current album cover is already {embedded_size}.")
-    elif is_upscaling:
-        st.warning(
-            f"This will upscale the current {current_width}x{current_height} cover to {embedded_size}. "
-            "It may look blurry."
+    def upload_cover(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Cover Image",
+            "",
+            "Images (*.jpg *.jpeg *.png *.webp)"
         )
-        allow_upscaling = st.checkbox(
-            "Allow upscaling",
-            key=f"allow-cover-upscale:{info.path}",
+
+        if not file_path:
+            return
+
+        action = "Replace" if self.current_cover_data else "Add"
+        accepted, resize = self._confirm_cover_embed(
+            f"{action} Cover Art",
+            f"Resize uploaded cover for {self.audio_info.path.name}:",
+            action
         )
-    else:
-        st.caption(f"Will resize current cover to {embedded_size}.")
+        if not accepted:
+            return
 
-    if st.button(
-        "Resize embedded cover",
-        disabled=is_current_size or (is_upscaling and not allow_upscaling),
-        key=f"resize-embedded-cover:{info.path}",
-        use_container_width=True,
-    ):
+        self._embed_image(file_path, resize)
+
+    def _confirm_cover_embed(self, title: str, message: str, action: str) -> tuple[bool, bool]:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setSpacing(12)
+
+        dialog_layout.addWidget(QLabel(message))
+
+        group = QButtonGroup(dialog)
+        resize_radio = QRadioButton("500×500 (recommended)")
+        original_radio = QRadioButton("Keep original size")
+        resize_radio.setChecked(True)
+        group.addButton(resize_radio)
+        group.addButton(original_radio)
+        dialog_layout.addWidget(resize_radio)
+        dialog_layout.addWidget(original_radio)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dialog.reject)
+        ok_btn = QPushButton(action)
+        ok_btn.setObjectName("primary")
+        ok_btn.clicked.connect(dialog.accept)
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(ok_btn)
+        dialog_layout.addLayout(btn_layout)
+
+        dialog.setMinimumWidth(300)
+        accepted = dialog.exec() == 1
+        return accepted, resize_radio.isChecked()
+
+    def _embed_image(self, file_path: str, resize: bool):
         try:
-            cover_data = resize_cover_image(
-                info.cover_data,
-                width=target_size,
-                height=target_size,
-            )
-            embed_cover(info.path, cover_data)
-            st.session_state.cover_status = {
-                "path": str(info.path),
-                "type": "success",
-                "message": f"Cover art resized to {embedded_size}.",
-            }
-            st.rerun()
+            with open(file_path, "rb") as f:
+                image_data = f.read()
+
+            width = DEFAULT_COVER_SIZE if resize else None
+            height = DEFAULT_COVER_SIZE if resize else None
+            if width and height:
+                prepared = prepare_cover_image(BytesIO(image_data), width, height, resize=True)
+            else:
+                prepared = prepare_cover_image(BytesIO(image_data), resize=False)
+
+            embed_cover(self.audio_info.path, prepared)
+
+            self.current_cover_data = prepared
+            self.update_cover_display()
+            self._update_cover_info()
+            self._set_cover_controls_enabled(True)
+            self.cover_changed.emit()
+
+            QMessageBox.information(self, "Success", "Cover art embedded successfully.")
         except Exception as e:
-            st.session_state.cover_status = {
-                "path": str(info.path),
-                "type": "error",
-                "message": f"Could not resize cover art: {e}",
-            }
-            st.rerun()
+            QMessageBox.critical(self, "Error", f"Failed to embed cover: {str(e)}")
 
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and self._is_image_file(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
 
-def _render_remove_cover_button(info: AudioInfo):
-    if st.button(
-        "Remove album cover",
-        key=f"remove-cover:{info.path}",
-        use_container_width=True,
-    ):
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and self._is_image_file(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        file_path = None
+        for url in event.mimeData().urls():
+            candidate = url.toLocalFile()
+            if self._is_image_file(candidate):
+                file_path = candidate
+                break
+
+        if not file_path:
+            event.ignore()
+            return
+
+        event.acceptProposedAction()
+
+        action = "Replace" if self.current_cover_data else "Add"
+        accepted, resize = self._confirm_cover_embed(
+            f"{action} Cover Art",
+            f"Use the dropped image to {action.lower()} the cover art for {self.audio_info.path.name}?",
+            action
+        )
+        if accepted:
+            self._embed_image(file_path, resize)
+
+    def _is_image_file(self, file_path: str) -> bool:
+        return Path(file_path).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+
+    def resize_cover(self):
+        if not self.current_cover_data:
+            return
+
+        size = self.resize_combo.currentData()
+
         try:
-            remove_cover(info.path)
-            st.session_state.cover_status = {
-                "path": str(info.path),
-                "type": "success",
-                "message": "Cover art removed.",
-            }
-            st.rerun()
+            resized = resize_cover_image(self.current_cover_data, size, size)
+            embed_cover(self.audio_info.path, resized)
+
+            self.current_cover_data = resized
+            self.update_cover_display()
+            self._update_cover_info()
+            self.cover_changed.emit()
+
+            QMessageBox.information(self, "Success", f"Cover resized to {size}×{size}.")
         except Exception as e:
-            st.session_state.cover_status = {
-                "path": str(info.path),
-                "type": "error",
-                "message": f"Could not remove cover art: {e}",
-            }
-            st.rerun()
+            QMessageBox.critical(self, "Error", f"Failed to resize cover: {str(e)}")
 
+    def remove_cover(self):
+        if not self.current_cover_data:
+            return
 
-def _default_cover_size_index(current_width: Optional[int], current_height: Optional[int], size_options: list[str]) -> int:
-    if current_width is None or current_height is None:
-        default_size = DEFAULT_COVER_SIZE
-    else:
-        current_size = min(current_width, current_height)
-        default_size = max((size for size in COVER_SIZE_OPTIONS if size <= current_size), default=DEFAULT_COVER_SIZE)
+        reply = QMessageBox.question(
+            self,
+            "Confirm",
+            "Remove cover art from this file?",
+            QMessageBox.Yes | QMessageBox.No
+        )
 
-    return size_options.index(f"{default_size}x{default_size}")
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            remove_cover(self.audio_info.path)
+            self.current_cover_data = None
+            self.update_cover_display()
+            self._update_cover_info()
+            self._set_cover_controls_enabled(False)
+            self.cover_changed.emit()
+
+            QMessageBox.information(self, "Success", "Cover art removed.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to remove cover: {str(e)}")

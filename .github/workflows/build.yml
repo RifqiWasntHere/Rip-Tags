@@ -9,8 +9,12 @@ on:
 
 jobs:
   build:
-    name: Build Windows
-    runs-on: windows-latest
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Check out repository
@@ -21,30 +25,39 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Debug Windows environment
-        shell: cmd
+      - name: Build macOS app
+        if: runner.os == 'macOS'
         run: |
-          echo Current directory:
-          cd
-          echo.
-          echo Files in root:
-          dir
+          bash MacOs/setup.sh
+          bash MacOs/build.sh
 
-      - name: Run Windows setup
-        shell: cmd
+      - name: Zip macOS app
+        if: runner.os == 'macOS'
         run: |
-          call "Windows (Unstable)\windows_setup.bat" || exit /b 1
+          cd dist
+          zip -r "Rip Tags-macOS.zip" "Rip Tags.app"
 
-      - name: Run Windows build
+      - name: Build Windows exe
+        if: runner.os == 'Windows'
         shell: cmd
         run: |
-          call "Windows (Unstable)\build.bat" || exit /b 1
+          "Windows (Unstable)\windows_setup.bat"
+          "Windows (Unstable)\build.bat"
 
       - name: Zip Windows app
+        if: runner.os == 'Windows'
         run: |
           Compress-Archive -Path "dist\Rip Tags" -DestinationPath "dist\Rip Tags-Windows.zip"
 
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rip-Tags-macOS
+          path: dist/Rip Tags-macOS.zip
+
       - name: Upload Windows artifact
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: Rip-Tags-Windows

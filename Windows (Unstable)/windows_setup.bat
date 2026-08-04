@@ -20,7 +20,7 @@ if errorlevel 1 (
     echo Install Python from:
     echo https://python.org
     if not "%CI%"=="true" pause
-    exit /b 1
+    exit /b
 )
 
 if not exist "%PROJECT_DIR%\.venv" (
@@ -47,4 +47,3 @@ if errorlevel 1 (
 echo.
 echo Setup complete.
 if not "%CI%"=="true" pause
-endlocal
