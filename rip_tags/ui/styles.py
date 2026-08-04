@@ -45,21 +45,12 @@ def apply_app_shell_styles():
 
             [data-testid="stSidebarHeader"] {
                 align-items: center;
-                min-height: 3.25rem;
-                padding-bottom: 0.5rem;
-                padding-top: 0.5rem;
+                min-height: 0;
+                padding-bottom: 0.25rem;
+                padding-top: 0.25rem;
             }
 
-            [data-testid="stSidebarHeader"]::before {
-                content: "Rip-Tags";
-                display: block;
-                flex: 1;
-                font-size: 1.35rem;
-                font-weight: 700;
-                line-height: 1.2;
-                margin-left: 0.25rem;
-                white-space: nowrap;
-            }
+
 
             .cover-empty-label {
                 align-items: center;

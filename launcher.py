@@ -2,7 +2,11 @@ import subprocess
 import socket
 import sys
 import time
+from pathlib import Path
+
 import webview
+
+_ICON_PATH = str(Path(__file__).parent / "Rip-Tags.png")
 
 PORT = 8501
 
@@ -38,10 +42,10 @@ for _ in range(50):
 window = webview.create_window(
     "Rip Tags",
     f"http://localhost:{PORT}",
-    width=1200,
-    height=800,
+    width=1920,
+    height=1080,
 )
 
 window.events.closed += on_closed
 
-webview.start()
+webview.start(icon=_ICON_PATH)
