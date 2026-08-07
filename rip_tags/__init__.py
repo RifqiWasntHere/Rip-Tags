@@ -1,6 +1,8 @@
 from rip_tags.cleaner import CleanResult, SUPPORTED_SUFFIXES, clean_file, scan
 from rip_tags.tags import ALL_SUPPORTED_TAGS, RECOMMENDED_TAGS
 
+__version__ = "1.0.0-beta.1"
+
 __all__ = [
     "CleanResult",
     "SUPPORTED_SUFFIXES",
@@ -8,4 +10,5 @@ __all__ = [
     "scan",
     "ALL_SUPPORTED_TAGS",
     "RECOMMENDED_TAGS",
+    "__version__",
 ]

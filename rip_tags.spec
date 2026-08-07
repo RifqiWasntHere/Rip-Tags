@@ -124,7 +124,7 @@ app = BUNDLE(
     icon=APP_ICON,
     bundle_identifier='com.riptags.app',
     info_plist={
-        'CFBundleShortVersionString': '0.1.0',
+        'CFBundleShortVersionString': '1.0.0',
         'CFBundleVersion': '1',
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '10.15',
