@@ -1,7 +1,14 @@
 @echo off
 setlocal
 
-cd /d "%~dp0\.."
+set "PROJECT_DIR=%~dp0.."
+cd /d "%PROJECT_DIR%"
+set "PROJECT_DIR=%CD%"
+
+echo === BUILD RIP TAGS ===
+echo Script directory: "%~dp0"
+echo Project directory: "%PROJECT_DIR%"
+echo Current directory: %CD%
 
 if not exist ".venv\Scripts\python.exe" (
     echo.
@@ -35,7 +42,16 @@ echo === Building Rip Tags.exe ===
 .venv\Scripts\python -m PyInstaller rip_tags.spec --noconfirm
 if errorlevel 1 (
     echo Build failed.
-    pause
+    if not "%CI%"=="true" pause
+    exit /b 1
+)
+
+if not exist "dist\Rip Tags" (
+    echo.
+    echo ERROR: Expected output directory "dist\Rip Tags" was not created.
+    echo Listing dist directory:
+    dir "dist" 2>nul || echo dist directory does not exist.
+    if not "%CI%"=="true" pause
     exit /b 1
 )
 
