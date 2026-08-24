@@ -1,58 +1,58 @@
-name: Build Rip Tags
+# name: Build Rip Tags
 
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-  workflow_dispatch:
+# on:
+#   push:
+#     branches: [main, master]
+#   pull_request:
+#     branches: [main, master]
+#   workflow_dispatch:
 
-jobs:
-  build:
-    name: Build Windows
-    runs-on: windows-latest
+# jobs:
+#   build:
+#     name: Build Windows
+#     runs-on: windows-latest
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+#     steps:
+#       - name: Check out repository
+#         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.11'
 
-      - name: Debug Windows environment
-        shell: cmd
-        run: |
-          echo Current directory:
-          cd
-          echo.
-          echo Files in root:
-          dir
+#       - name: Debug Windows environment
+#         shell: cmd
+#         run: |
+#           echo Current directory:
+#           cd
+#           echo.
+#           echo Files in root:
+#           dir
 
-      - name: Run Windows setup
-        shell: cmd
-        run: |
-          call "Windows (Unstable)\windows_setup.bat" || exit /b 1
+#       - name: Run Windows setup
+#         shell: cmd
+#         run: |
+#           call "Windows (Unstable)\windows_setup.bat" || exit /b 1
 
-      - name: Run Windows build
-        shell: cmd
-        run: |
-          call "Windows (Unstable)\build.bat" || exit /b 1
+#       - name: Run Windows build
+#         shell: cmd
+#         run: |
+#           call "Windows (Unstable)\build.bat" || exit /b 1
 
-      - name: List dist contents
-        if: always()
-        shell: cmd
-        run: |
-          echo Listing dist directory...
-          dir dist /s /b 2>nul || echo dist directory not found
+#       - name: List dist contents
+#         if: always()
+#         shell: cmd
+#         run: |
+#           echo Listing dist directory...
+#           dir dist /s /b 2>nul || echo dist directory not found
 
-      - name: Zip Windows app
-        run: |
-          Compress-Archive -Path "dist\Rip Tags" -DestinationPath "dist\Rip Tags-Windows.zip"
+#       - name: Zip Windows app
+#         run: |
+#           Compress-Archive -Path "dist\Rip Tags" -DestinationPath "dist\Rip Tags-Windows.zip"
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rip-Tags-Windows
-          path: dist/Rip Tags-Windows.zip
+#       - name: Upload Windows artifact
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: Rip-Tags-Windows
+#           path: dist/Rip Tags-Windows.zip
