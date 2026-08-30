@@ -5,15 +5,16 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QCheckBox, QTreeWidget, QTreeWidgetItem, QLineEdit,
     QHeaderView, QProgressBar, QTabWidget, QTableWidget, QTableWidgetItem,
-    QStatusBar, QMessageBox
+    QStatusBar, QMessageBox, QStyle, QStyleOptionViewItem
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QCursor
 
-from rip_tags.cleaner import SUPPORTED_SUFFIXES, CleanResult
+from rip_tags.cleaner import CleanResult
 from rip_tags.metadata import to_display_name
 from rip_tags.tags import ALL_SUPPORTED_TAGS, RECOMMENDED_TAGS
 from rip_tags.ui.preferences import PreferencesDialog
-from rip_tags.ui.worker import CleanWorker
+from rip_tags.ui.worker import CleanWorker, FolderScanWorker
 from rip_tags.ui.components import Card, EmptyState, MetricItem, TextOnlySelectionDelegate
 
 
@@ -25,6 +26,10 @@ class BatchCleanerWidget(QWidget):
         self.current_folder: Optional[Path] = None
         self.keep_tags_pref: dict = {tag: (tag in RECOMMENDED_TAGS) for tag in ALL_SUPPORTED_TAGS}
         self.clean_worker: Optional[CleanWorker] = None
+        self.scan_worker: Optional[FolderScanWorker] = None
+        self.scan_workers: list[FolderScanWorker] = []
+        self._scan_token = 0
+        self.clean_folder: Optional[Path] = None
         self.status_bar = status_bar
         self.all_files: list[Path] = []
 
@@ -109,6 +114,7 @@ class BatchCleanerWidget(QWidget):
         self.file_tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.file_tree.setItemDelegate(TextOnlySelectionDelegate(self.file_tree))
         self.file_tree.itemClicked.connect(self.on_tree_item_clicked)
+        self.file_tree.itemDoubleClicked.connect(self.on_tree_item_double_clicked)
         self.file_tree.itemChanged.connect(self.on_tree_item_changed)
         main_layout.addWidget(self.file_tree, 1)
 
@@ -171,12 +177,27 @@ class BatchCleanerWidget(QWidget):
         if not self.current_folder or not self.current_folder.exists():
             return
 
+        self._scan_token += 1
         self.file_tree.clear()
         self.clean_btn.setEnabled(False)
-        self.all_files = sorted([
-            f for f in self.current_folder.rglob("*")
-            if f.is_file() and f.suffix.lower() in SUPPORTED_SUFFIXES and not f.name.startswith("._")
-        ])
+        self._update_status("Scanning folder...")
+
+        self.scan_worker = FolderScanWorker(self.current_folder)
+        self.scan_workers.append(self.scan_worker)
+        token = self._scan_token
+        self.scan_worker.finished.connect(
+            lambda files, w=self.scan_worker: self._on_scan_finished(files, token, w)
+        )
+        self.scan_worker.start()
+
+    def _on_scan_finished(self, files: list[Path], token: int, worker: FolderScanWorker):
+        if worker in self.scan_workers:
+            self.scan_workers.remove(worker)
+
+        if token != self._scan_token:
+            return
+
+        self.all_files = files
 
         flac_count = sum(1 for f in self.all_files if f.suffix.lower() == ".flac")
         m4a_count = sum(1 for f in self.all_files if f.suffix.lower() in {".m4a", ".mp4"})
@@ -187,6 +208,8 @@ class BatchCleanerWidget(QWidget):
 
         if not self.all_files:
             self.selected_count_label.setText("0 selected")
+            self.clean_btn.setEnabled(False)
+            self._update_status(f"No supported files in {self.current_folder.name}")
             return
 
         groups: dict[str, list[Path]] = {}
@@ -243,14 +266,44 @@ class BatchCleanerWidget(QWidget):
                 if visible:
                     group_visible = True
             group_item.setHidden(not group_visible)
+            self._update_group_state(group_item)
+        self.update_selected_count()
 
     def on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
-        if column == 0:
-            item_type = item.data(0, Qt.UserRole)
-            if item_type == "file":
-                file_path = item.data(0, Qt.UserRole + 1)
-                if file_path:
-                    self.file_selected.emit(file_path)
+        if column != 0:
+            return
+
+        pos = self.file_tree.viewport().mapFromGlobal(QCursor.pos())
+        if self._is_checkbox_click(item, pos):
+            return
+
+        new_state = Qt.Unchecked if item.checkState(0) == Qt.Checked else Qt.Checked
+        item.setCheckState(0, new_state)
+
+    def on_tree_item_double_clicked(self, item: QTreeWidgetItem, column: int):
+        if column != 0:
+            return
+
+        pos = self.file_tree.viewport().mapFromGlobal(QCursor.pos())
+        if self._is_checkbox_click(item, pos):
+            return
+
+        if item.data(0, Qt.UserRole) == "file":
+            file_path = item.data(0, Qt.UserRole + 1)
+            if file_path:
+                self.file_selected.emit(file_path)
+
+    def _is_checkbox_click(self, item: QTreeWidgetItem, pos) -> bool:
+        index = self.file_tree.indexFromItem(item)
+        item_rect = self.file_tree.visualItemRect(item)
+        opt = QStyleOptionViewItem()
+        opt.rect = item_rect
+        self.file_tree.itemDelegate().initStyleOption(opt, index)
+        opt.rect = item_rect
+        check_rect = self.file_tree.style().subElementRect(
+            QStyle.SE_ItemViewItemCheckIndicator, opt, self.file_tree.viewport()
+        )
+        return check_rect.isValid() and check_rect.contains(pos)
 
     def on_tree_item_changed(self, item: QTreeWidgetItem, column: int):
         if column != 0:
@@ -260,10 +313,14 @@ class BatchCleanerWidget(QWidget):
 
         if item_type == "group":
             state = item.checkState(0)
+            if state == Qt.PartiallyChecked:
+                return
+            self.file_tree.blockSignals(True)
             for i in range(item.childCount()):
                 child = item.child(i)
                 if not child.isHidden():
                     child.setCheckState(0, state)
+            self.file_tree.blockSignals(False)
         elif item_type == "file":
             parent = item.parent()
             if parent:
@@ -341,13 +398,17 @@ class BatchCleanerWidget(QWidget):
             if child.checkState(0) == Qt.Checked:
                 checked_count += 1
         if visible_count == 0:
-            group_item.setCheckState(0, Qt.Unchecked)
+            state = Qt.Unchecked
         elif checked_count == 0:
-            group_item.setCheckState(0, Qt.Unchecked)
+            state = Qt.Unchecked
         elif checked_count == visible_count:
-            group_item.setCheckState(0, Qt.Checked)
+            state = Qt.Checked
         else:
-            group_item.setCheckState(0, Qt.PartiallyChecked)
+            state = Qt.PartiallyChecked
+
+        self.file_tree.blockSignals(True)
+        group_item.setCheckState(0, state)
+        self.file_tree.blockSignals(False)
 
     def show_preferences(self):
         dialog = PreferencesDialog(self.keep_tags_pref, self)
@@ -360,6 +421,7 @@ class BatchCleanerWidget(QWidget):
         if not self.current_folder:
             return
 
+        self.clean_folder = self.current_folder
         files_to_clean = []
         for i in range(self.file_tree.topLevelItemCount()):
             group_item = self.file_tree.topLevelItem(i)
@@ -415,11 +477,15 @@ class BatchCleanerWidget(QWidget):
         self.clean_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.show_results(results)
-        cleaned = sum(1 for r in results if r.status == "cleaned")
+        cleaned = sum(1 for r in results if r.status in {"cleaned", "would_clean"})
         unchanged = sum(1 for r in results if r.status == "unchanged")
         errors = sum(1 for r in results if r.status == "failed")
         mode = "preview" if self.preview_checkbox.isChecked() else "clean"
         self._update_status(f"{mode.capitalize()} complete: {cleaned} cleaned, {unchanged} unchanged, {errors} errors")
+
+    @staticmethod
+    def _status_display(status: str) -> str:
+        return "would clean" if status == "would_clean" else status
 
     def show_results(self, results: list[CleanResult]):
         self.results_card.setVisible(True)
@@ -432,7 +498,7 @@ class BatchCleanerWidget(QWidget):
         summary_layout.setContentsMargins(0, 0, 0, 0)
         summary_layout.setSpacing(24)
 
-        cleaned_count = sum(1 for r in results if r.status == "cleaned")
+        cleaned_count = sum(1 for r in results if r.status in {"cleaned", "would_clean"})
         unchanged_count = sum(1 for r in results if r.status == "unchanged")
         error_count = sum(1 for r in results if r.status == "failed")
 
@@ -457,11 +523,11 @@ class BatchCleanerWidget(QWidget):
         details_table.setRowCount(len(results))
 
         for row, result in enumerate(results):
-            rel_path = str(result.path.relative_to(self.current_folder)) if self.current_folder else str(result.path)
+            rel_path = str(result.path.relative_to(self.clean_folder)) if self.clean_folder else str(result.path)
             removed = dict.fromkeys(result.removed)
             kept = dict.fromkeys(result.kept)
             details_table.setItem(row, 0, QTableWidgetItem(rel_path))
-            details_table.setItem(row, 1, QTableWidgetItem(result.status))
+            details_table.setItem(row, 1, QTableWidgetItem(self._status_display(result.status)))
             details_table.setItem(row, 2, QTableWidgetItem(", ".join(to_display_name(tag) for tag in removed)))
             details_table.setItem(row, 3, QTableWidgetItem(", ".join(to_display_name(tag) for tag in kept)))
 

@@ -122,7 +122,7 @@ class SidebarWidget(QWidget):
 
     def populate_tree(self, folder_path: Path):
         self.tree.clear()
-        file_count = self._add_directory_items(self.tree.invisibleRootItem(), folder_path, depth=0, max_depth=3)
+        file_count = self._add_directory_items(self.tree.invisibleRootItem(), folder_path, depth=0, max_depth=6)
         self.folder_count_label.setText(f"{file_count} files")
         self.empty_state.setVisible(file_count == 0)
         self.tree.setVisible(file_count > 0)
@@ -160,10 +160,13 @@ class SidebarWidget(QWidget):
 
     def on_tree_item_clicked(self, item: QTreeWidgetItem, column: int):
         path_str = item.data(0, Qt.UserRole)
-        if path_str:
-            path = Path(path_str)
-            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
-                self.file_selected.emit(path_str)
+        if not path_str:
+            return
+        path = Path(path_str)
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
+            self.file_selected.emit(path_str)
+        elif path.is_dir():
+            self.folder_selected.emit(path_str)
 
     def on_recent_clicked(self, item: QListWidgetItem):
         folder = item.data(Qt.UserRole)

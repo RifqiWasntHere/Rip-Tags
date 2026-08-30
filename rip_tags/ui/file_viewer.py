@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-from rip_tags.metadata import AudioInfo, read_audio_info, to_canonical_tag, to_display_name
+from rip_tags.metadata import AudioInfo, read_audio_info, to_canonical_tag, to_display_name, is_sort_tag_key
 from rip_tags.ui.cover_editor import CoverEditorWidget
 from rip_tags.ui.components import Card, MetricItem
 from rip_tags.ui.preferences import TAG_GROUPS
@@ -156,8 +156,14 @@ class FileViewerWidget(QWidget):
             for tag in tags:
                 tag_to_group[tag] = group_name
 
-        for key, value in self.audio_info.tags.items():
+        canonical_keys: dict[str, list[str]] = {}
+        for key in self.audio_info.tags:
             canonical = to_canonical_tag(key, file_type)
+            canonical_keys.setdefault(canonical, []).append(key)
+
+        for canonical, keys in canonical_keys.items():
+            key = next((k for k in keys if not is_sort_tag_key(k, file_type)), keys[0])
+            value = self.audio_info.tags[key]
             group = tag_to_group.get(canonical, "Other")
             grouped.setdefault(group, []).append((to_display_name(canonical), str(value)))
 
@@ -186,7 +192,7 @@ class FileViewerWidget(QWidget):
             if system == "Darwin":
                 subprocess.run(["open", "-R", str(path)], check=True)
             elif system == "Windows":
-                subprocess.run(["explorer", "/select,", str(path)], check=True)
+                subprocess.run(["explorer", f"/select,{path}"], check=True)
             else:
                 subprocess.run(["xdg-open", str(path.parent)], check=True)
         except Exception as e:

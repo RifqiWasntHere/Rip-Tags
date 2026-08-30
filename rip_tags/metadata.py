@@ -73,11 +73,11 @@ MP4_TAG_MAPPING = {
     "stik": "media type",
     "rtng": "explicit rating",
     "pgap": "gapless playback",
-    "sonm": "sort title",
-    "soar": "sort artist",
-    "soal": "sort album",
-    "soaa": "sort albumartist",
-    "soco": "sort composer",
+    "sonm": "title",
+    "soar": "artist",
+    "soal": "album",
+    "soaa": "albumartist",
+    "soco": "composer",
     "disk": "disk",
     "disc": "disk",
 }
@@ -124,17 +124,17 @@ FLAC_TAG_MAPPING = {
     "explicitrating": "explicit rating",
     "gapless playback": "gapless playback",
     "gaplessplayback": "gapless playback",
-    "sort title": "sort title",
-    "sorttitle": "sort title",
-    "sort artist": "sort artist",
-    "sortartist": "sort artist",
-    "sort album": "sort album",
-    "sortalbum": "sort album",
-    "sort albumartist": "sort albumartist",
-    "sort album artist": "sort albumartist",
-    "sortalbumartist": "sort albumartist",
-    "sort composer": "sort composer",
-    "sortcomposer": "sort composer",
+    "sort title": "title",
+    "sorttitle": "title",
+    "sort artist": "artist",
+    "sortartist": "artist",
+    "sort album": "album",
+    "sortalbum": "album",
+    "sort albumartist": "albumartist",
+    "sort album artist": "albumartist",
+    "sortalbumartist": "albumartist",
+    "sort composer": "composer",
+    "sortcomposer": "composer",
 }
 
 
@@ -164,16 +164,28 @@ TAG_DISPLAY_NAMES = {
     "media type": "Media Type",
     "explicit rating": "Explicit Rating",
     "gapless playback": "Gapless Playback",
-    "sort title": "Sort Title",
-    "sort artist": "Sort Artist",
-    "sort album": "Sort Album",
-    "sort albumartist": "Sort Album Artist",
-    "sort composer": "Sort Composer",
 }
 
 
 def _normalize_tag_name(tag: str) -> str:
     return tag.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+MP4_SORT_KEYS = {"sonm", "soar", "soal", "soaa", "soco"}
+
+MP4_SORT_TO_BASE = {
+    "sonm": "\xa9nam",
+    "soar": "\xa9ART",
+    "soal": "\xa9alb",
+    "soaa": "aART",
+    "soco": "\xa9wrt",
+}
+
+
+def is_sort_tag_key(tag: str, file_type: str) -> bool:
+    if file_type == "MP4":
+        return tag in MP4_SORT_KEYS
+    return _normalize_tag_name(tag).startswith("sort")
 
 
 def to_canonical_tag(tag: str, file_type: str) -> str:
@@ -197,6 +209,21 @@ def to_canonical_tag(tag: str, file_type: str) -> str:
         return FLAC_TAG_MAPPING.get(normalized, normalized)
 
     return tag.lower()
+
+
+def to_sort_display(tag: str, file_type: str) -> Optional[str]:
+    tag = str(tag)
+
+    if file_type == "MP4":
+        if tag in MP4_SORT_TO_BASE:
+            base_canonical = to_canonical_tag(MP4_SORT_TO_BASE[tag], "MP4")
+            return "sort " + base_canonical
+        return None
+
+    if is_sort_tag_key(tag, file_type):
+        return tag.lower()
+
+    return None
 
 
 def to_display_name(canonical_tag: str) -> str:

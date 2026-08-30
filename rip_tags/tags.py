@@ -36,12 +36,6 @@ ALL_SUPPORTED_TAGS = [
     "media type",
     "explicit rating",
     "gapless playback",
-    # Sorting tags
-    "sort title",
-    "sort artist",
-    "sort album",
-    "sort albumartist",
-    "sort composer",
 ]
 
 # Subset of tags kept when the "Recommended" button is clicked.

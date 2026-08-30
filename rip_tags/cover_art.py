@@ -28,6 +28,16 @@ def get_cover_dimensions(image_data: bytes):
     return image.size
 
 
+def detect_image_format(image_data: bytes) -> str:
+    try:
+        image = Image.open(BytesIO(image_data))
+        if (image.format or "").lower() == "png":
+            return "image/png"
+    except Exception:
+        pass
+    return COVER_MIME
+
+
 def _encode_cover_image(image: Image.Image, width=DEFAULT_COVER_SIZE, height=DEFAULT_COVER_SIZE, resize=True):
     if resize:
         image = ImageOps.fit(image, (width, height), method=Image.Resampling.LANCZOS)
@@ -51,7 +61,7 @@ def embed_cover(path: Path, cover_data: bytes, mime=COVER_MIME):
     suffix = path.suffix.lower()
 
     if suffix in {".m4a", ".mp4"}:
-        _embed_mp4_cover(path, cover_data)
+        _embed_mp4_cover(path, cover_data, mime)
         return
 
     if suffix == ".flac":
@@ -76,13 +86,14 @@ def remove_cover(path: Path):
     raise ValueError(f"Cover removal is not supported for {suffix}")
 
 
-def _embed_mp4_cover(path: Path, cover_data: bytes):
+def _embed_mp4_cover(path: Path, cover_data: bytes, mime=COVER_MIME):
     audio = MP4(path)
 
     if audio.tags is None:
         audio.tags = MP4Tags()
 
-    audio.tags["covr"] = [MP4Cover(cover_data, imageformat=MP4Cover.FORMAT_JPEG)]
+    imageformat = MP4Cover.FORMAT_PNG if mime == "image/png" else MP4Cover.FORMAT_JPEG
+    audio.tags["covr"] = [MP4Cover(cover_data, imageformat=imageformat)]
     audio.save()
 
 

@@ -5,7 +5,7 @@ from typing import Callable, Optional
 from mutagen.flac import FLAC
 from mutagen.mp4 import MP4, MP4Tags
 
-from rip_tags.metadata import to_canonical_tag
+from rip_tags.metadata import MP4_SORT_TO_BASE, is_sort_tag_key, to_canonical_tag, to_sort_display
 from rip_tags.tags import RECOMMENDED_TAGS
 
 SUPPORTED_SUFFIXES = {".m4a", ".mp4", ".flac"}
@@ -113,6 +113,12 @@ def _clean_mp4(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
     if "\xa9day" in kept:
         kept["\xa9day"] = _shorten_year(kept["\xa9day"])
 
+    for key in list(kept):
+        if key in MP4_SORT_TO_BASE:
+            base = MP4_SORT_TO_BASE[key]
+            kept[base] = kept[key]
+            del kept[key]
+
     removed = sorted(set(original) - set(kept))
 
     if not dry_run and removed:
@@ -128,7 +134,7 @@ def _clean_mp4(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
         status = "unchanged"
 
     kept_human = sorted(to_canonical_tag(key, "MP4") for key in kept)
-    removed_human = sorted(to_canonical_tag(key, "MP4") for key in removed)
+    removed_human = sorted(to_sort_display(key, "MP4") or to_canonical_tag(key, "MP4") for key in removed)
 
     return CleanResult(path, status, kept_human, removed_human)
 
@@ -151,13 +157,25 @@ def _clean_flac(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
         if key in kept:
             kept[key] = _shorten_year(kept[key])
 
+    for key in list(kept):
+        if is_sort_tag_key(key, "FLAC"):
+            kept[to_canonical_tag(key, "FLAC")] = kept[key]
+            del kept[key]
+
     removed = sorted(key for key in original if key not in kept)
 
-    if not dry_run and removed:
+    remove_cover = "cover" not in keep_tags and bool(audio.pictures)
+    if remove_cover:
+        removed.append("cover")
+
+    if not dry_run and (removed or remove_cover):
         audio.tags.clear()
 
         for key, value in kept.items():
             audio.tags[key] = value
+
+        if remove_cover:
+            audio.clear_pictures()
 
         audio.save()
 
@@ -166,6 +184,6 @@ def _clean_flac(path: Path, dry_run: bool, keep_tags: set[str]) -> CleanResult:
         status = "unchanged"
 
     kept_human = sorted(to_canonical_tag(key, "FLAC") for key in kept)
-    removed_human = sorted(to_canonical_tag(key, "FLAC") for key in removed)
+    removed_human = sorted(to_sort_display(key, "FLAC") or to_canonical_tag(key, "FLAC") for key in removed)
 
     return CleanResult(path, status, kept_human, removed_human)

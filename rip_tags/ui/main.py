@@ -4,6 +4,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter, QStackedWidget, QStatusBar
 from PySide6.QtCore import Qt
 
+from rip_tags import __version__
 from rip_tags.ui.styles import APP_STYLE
 from rip_tags.ui.sidebar import SidebarWidget
 from rip_tags.ui.batch_cleaner import BatchCleanerWidget
@@ -14,7 +15,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        self.setWindowTitle("Rip Tags")
+        self.setWindowTitle(f"Rip Tags {__version__}")
         self.resize(1400, 900)
         self.setMinimumSize(1400, 900)
         
@@ -24,7 +25,7 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon_path)))
         
         self.status_bar = QStatusBar()
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showMessage(f"Ready  ·  v{__version__}")
         self.setStatusBar(self.status_bar)
         
         splitter = QSplitter(Qt.Horizontal)
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
         
         self.sidebar.folder_selected.connect(self.batch_cleaner.set_folder)
         self.sidebar.file_selected.connect(self.show_file_viewer)
+        self.batch_cleaner.file_selected.connect(self.show_file_viewer)
         self.sidebar.preferences_requested.connect(self.batch_cleaner.show_preferences)
         self.file_viewer.back_requested.connect(self.show_batch_cleaner)
         
