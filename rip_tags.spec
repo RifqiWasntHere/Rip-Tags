@@ -2,6 +2,8 @@ import os
 import sys
 import glob
 
+from rip_tags import __version__
+
 block_cipher = None
 
 ROOT = os.path.abspath('.')
@@ -124,8 +126,8 @@ app = BUNDLE(
     icon=APP_ICON,
     bundle_identifier='com.riptags.app',
     info_plist={
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1',
+        'CFBundleShortVersionString': __version__,
+        'CFBundleVersion': __version__,
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '10.15',
     },

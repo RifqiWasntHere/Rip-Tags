@@ -24,10 +24,6 @@ TAG_GROUPS = {
         "purchase date", "apple id", "catalog id",
         "storefront", "media type", "explicit rating", "gapless playback",
     ],
-    "Sorting Tags": [
-        "sort title", "sort artist", "sort album",
-        "sort albumartist", "sort composer",
-    ],
 }
 
 

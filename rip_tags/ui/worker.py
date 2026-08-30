@@ -24,6 +24,21 @@ class ScanWorker(QThread):
         self.finished.emit(results)
 
 
+class FolderScanWorker(QThread):
+    finished = Signal(list)
+
+    def __init__(self, folder: Path):
+        super().__init__()
+        self.folder = folder
+
+    def run(self):
+        files = sorted(
+            f for f in self.folder.rglob("*")
+            if f.is_file() and f.suffix.lower() in SUPPORTED_SUFFIXES and not f.name.startswith("._")
+        )
+        self.finished.emit(files)
+
+
 class CleanWorker(QThread):
     finished = Signal(list)
     progress = Signal(str)
@@ -39,7 +54,8 @@ class CleanWorker(QThread):
         results = []
         for file in self.files:
             def log_func(msg):
-                self.progress.emit(msg)
+                if msg.startswith("Failed"):
+                    self.progress.emit(msg)
 
             result = clean_file(file, dry_run=self.dry_run, log_func=log_func, keep_tags=self.keep_tags)
             results.append(result)
